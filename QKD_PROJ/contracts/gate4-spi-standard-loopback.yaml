@@ -1,0 +1,94 @@
+schema_version: 1
+test_id: gate4-spi-standard-loopback
+status: candidate_approved
+
+purpose:
+  - Prove the standard BBB SPI0 data direction without any DAC output.
+  - Echo U2 pin 31 to U2 pin 33 only while SPI.CS is low.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program, readback_or_program_status]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_standard_loopback
+  sources:
+    hdl: QKD_PROJ/spi_standard_loopback/spi_standard_loopback.v
+    constraints: QKD_PROJ/spi_standard_loopback/spi_standard_loopback.lpf
+  signal_path:
+    source: {bbb_pin: P9_18, cpld_pin: 31, direction: input}
+    return: {cpld_pin: 33, bbb_pin: P9_21, direction: output}
+    chip_select: {bbb_pin: P9_17, cpld_pin: 32, direction: input, active: low}
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 3
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+  echo_must_equal_transmit: true
+
+build_result:
+  status: passed
+  run: 20260819T021934Z_gate4_spi_standard_loopback_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  source_sha256:
+    spi_standard_loopback.v: 0a41cd0d3e7f27d5b382011493745dfd63b9f94f95d05dd9258d3cc0f9da56db
+    spi_standard_loopback.lpf: 570999abfdc1a23fff528badbd5841587dbf5958801215ff63fd2cba33cfa584
+  bitstream_sha256: 2e9c1968b8294929badcda32508b18cb96e20ba9e105dfd964ce92c753c65353
+  bitstream_design_sha256: 5c89551cd052880604e09fcc9c3e4300f0b3374b2b4f1a337cb1043e8756010d
+  bitstream_bytes: 16049
+  placed_io:
+    spi_mosi: {pin: 31, buffer: LVCMOS33_IN}
+    spi_cs_n: {pin: 32, buffer: LVCMOS33_IN}
+    spi_miso: {pin: 33, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+
+sram_program_candidate:
+  status: executed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-20
+  approval_scope: one volatile SRAM program of this standard-direction loopback only
+  reapproval_reason: BBB RX static-high verification passed after BBB recovery;
+    user approved one new CS-gated MOSI-to-MISO echo verification.
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260820T024700Z_gate4_spi_standard_loopback_sram
+  execution_result: FAIL_echo_mismatch_all_modes
+  echo_result:
+    speed_hz_tested: [10000, 100000, 1000000]
+    tx: 00ffaa553cc3
+    rx_mode0: ffffffffffff
+    rx_modes1_to_3: nonmatching_high_or_low_patterns
+    conclusion: MOSI-to-MISO dynamic echo not observed after verified SRAM program
+  previous_execution_run: 20260819T022121Z_gate4_spi_standard_loopback_sram
+  previous_execution_result: PASS_echo_failed
+  previous_echo_result:
+    speed_hz_tested: [100000, 10000]
+    tx: 00ffaa553cc3
+    rx: 000000000000
+    conclusion: standard_direction_loopback_failed
+  directory: QKD_PROJ/candidates/gate4-spi-standard-loopback
+  bitstream: spi_standard_loopback_impl1.bit
+  bitstream_sha256: 2e9c1968b8294929badcda32508b18cb96e20ba9e105dfd964ce92c753c65353
+  bitstream_design_sha256: 5c89551cd052880604e09fcc9c3e4300f0b3374b2b4f1a337cb1043e8756010d
+  bitstream_bytes: 16049
+  source_sha256:
+    spi_standard_loopback.v: 0a41cd0d3e7f27d5b382011493745dfd63b9f94f95d05dd9258d3cc0f9da56db
+    spi_standard_loopback.lpf: 570999abfdc1a23fff528badbd5841587dbf5958801215ff63fd2cba33cfa584
+  companion_sha256:
+    spi_standard_loopback_impl1.pad: bfbe7a375013c8bcf8009ca105dc24154ebeeea4f42a8099dd63b620fb616bf2
+    build.log: f922038f5f8b15ff9dd986bb4315e2544b9b23b56176f63ccb39712c131f73d7
+    manifest.json: d57bc4c39dfba8151811beffa7612c52bef3b8982704e970eab761269094733f
+  immutable: true
+
+stop_conditions:
+  - Any DAC data, D1CLK, D2CLK, PRU, or analog-output pin is configured as an output.
+  - U2 pin 31 is configured as an output.
+  - U2 pin 33 is configured as an input.

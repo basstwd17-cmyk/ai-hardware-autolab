@@ -1,0 +1,7 @@
+# Test B: BBB SPI0 reversed D0/D1 direction.
+LOCATE COMP "spi_from_bbb_d0" SITE "33";
+IOBUF PORT "spi_from_bbb_d0" IO_TYPE=LVCMOS33;
+LOCATE COMP "spi_cs_n" SITE "32";
+IOBUF PORT "spi_cs_n" IO_TYPE=LVCMOS33;
+LOCATE COMP "spi_to_bbb_d1" SITE "31";
+IOBUF PORT "spi_to_bbb_d1" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;

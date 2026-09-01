@@ -1,0 +1,433 @@
+schema_version: 1
+board:
+  name: RTASE_V1
+  revision: V1.0
+  verified: false
+  verification_status: gate1_contract_draft
+  schematic:
+    path: QKD_PROJ/RTASE_V1_Schematic1_2026-08-13.pdf
+    created: 2026-07-10
+cpld:
+  part: LCMXO2-4000HC-4TG144C
+  device: LCMXO2-4000HC
+  package: TQFP144
+  speed_grade: 4
+  expected_idcode: "0x012BC043"
+  sources:
+    - QKD_PROJ/RTASE_V1_Schematic1_2026-08-13.pdf
+    - Lattice/Delay_test.ldf
+    - Lattice/impl1/impl1.xcf
+    - Lattice/impl1/Delay_test_impl1.pad
+jtag:
+  device_pins:
+    TMS: 130
+    TCK: 131
+    TDI: 136
+    TDO: 137
+  header:
+    reference: U4
+    part: FG-PZ2.54-02-04P
+    pin_1: VREF_3V3
+    pin_2: TDO
+    pin_3: TDI
+    pin_4: NC
+    pin_5: NC
+    pin_6: TMS
+    pin_7: GND
+    pin_8: TCK
+    # Confirmed 2026-08-14 from four independent sources that agree:
+    #   1. schematic net connections (QKD_PROJ/gate1-jtag-header.png)
+    #   2. PCB silkscreen, which labels each pad by signal name
+    #   3. pin 1 is a square pad on the layout
+    #   4. pull directions match JTAG convention: TMS/TDI/TDO pulled up
+    #      (R28/R29/R30 4.7k), TCK pulled down (R31 2.2k)
+    orientation_requires_visual_check: false
+    orientation_verified_on: 2026-08-14
+    physical_layout:
+      note: 2x4 header. Pins 1 and 2 are at one end, 7 and 8 at the other.
+      column_a: [8, 6, 4, 2]   # TCK, TMS, NC, TDO
+      column_b: [7, 5, 3, 1]   # GND, NC, TDI, +3.3V
+    resistance_signature:
+      # Lets orientation be confirmed with a meter alone, without trusting
+      # silkscreen. Measured against GND with the board unpowered.
+      pin_7: 0_ohm
+      pin_8: 2.2k_to_gnd
+      pin_4: open
+      pin_5: open
+      pin_1: continuity_to_3v3_rail
+  cable:
+    model: HW-USBN-2B
+    port: FTUSB-0
+    # Twelve flying leads. Labels transcribed from the cable itself on
+    # 2026-08-18, left to right in the photograph. Not from a datasheet and
+    # not inferred -- the order below is the physical order.
+    flywire_labels_in_order:
+      - 5V Out
+      - "I2C:SCL"
+      - TCK/SCLK
+      - TMS
+      - TDI/SI
+      - TDO/SO
+      - VCC
+      - ISPEN/PROG
+      - TRST
+      - GND
+      - DONE
+      - "I2C:SDA"
+    # The dual labels settle the direction question. SI means serial-in TO the
+    # target and SO means serial-out FROM it, so the names are written from the
+    # target's point of view. TDI and TDO share those wires, so they are target
+    # names too: connect like-to-like, no crossover.
+    label_perspective: target
+    connect_for_gate1:
+      VCC: 1
+      TDO/SO: 2
+      TDI/SI: 3
+      TMS: 6
+      GND: 7
+      TCK/SCLK: 8
+    do_not_connect:
+      "5V Out": >-
+        5 V into a 3.3 V board. Nothing on U4 accepts it and the CPLD, DAC and
+        EEPROM are all 3.3 V parts. This is the leftmost lead, next to the
+        signals that are used, so it is the easiest one to grab by mistake.
+      "I2C:SCL": Not used for JTAG. No I2C path to the CPLD on this board.
+      "I2C:SDA": Not used for JTAG.
+      ISPEN/PROG: Not brought out to U4. MachXO2 JTAG does not need it.
+      TRST: No TRST pin on MachXO2 and no U4 pin for it.
+      DONE: Not brought out to U4. U4 pins 4 and 5 are NC.
+    verified_on: 2026-08-18
+    verification_note: >-
+      Labels are confirmed. The wire-to-pin map above is derived from them and
+      from the U4 map, and is not itself proven until a scan returns one device
+      with the expected IDCODE. A TDI/TDO swap would show up as no device or a
+      garbage IDCODE, not as damage.
+  current_programming_project:
+    path: Lattice/impl1/impl1.xcf
+    access_mode: SRAM
+    operation: SRAM Fast Program
+    nonvolatile_flash_approved: false
+power:
+  # Traced from the schematic 2026-08-14. Two supplies that are physically
+  # independent, which is what makes a safe Gate 1 possible.
+  # logic_voltage_v and gate1_used_banks were merged in here 2026-08-18.
+  # They previously sat under a second top-level `power:` key, which YAML
+  # resolves by keeping the last one, so they never reached the loader.
+  logic_voltage_v: 3.3
+  gate1_used_banks:
+    bank0_vccio_v: 3.3
+    bank3_vccio_v: 3.3
+  rails_on_schematic: ["+3.3V", "+5V", "+15V", "-15V"]
+  decoupling: 15 x 100nF on +3.3V (C19..C36)
+
+  digital:
+    input: P9 (DS1021-2x23SF11-B, BeagleBone Black P9 header)
+    pins: {P9_5: "+5V", P9_6: "+5V", P9_3: "+3.3V", P9_4: "+3.3V"}
+    regulator:
+      reference: U9
+      part: TL5209DR
+      topology: LDO, +5V in -> +3.3V out
+      enable: EN tied to IN, always on
+      feedback: {top: R23 280k, bottom: R27 470k, ratio: 1.596}
+      # For the divider to give 3.3 V the reference must be about 2.07 V. That
+      # figure is still NOT confirmed from a datasheet -- none is available
+      # locally. It no longer blocks Gate 1 because the rail was measured
+      # directly instead: bench +5.0 V into P9_5 with the BBB and CN1 both
+      # disconnected put U4 pin 1 inside 3.3 V +/- 0.1 V. The 1.93 V failure
+      # case (a 1.21 V reference) is therefore ruled out by measurement, not
+      # by assuming a reference value.
+      output_voltage_verified: true
+      output_voltage_verified_on: 2026-08-18
+      output_voltage_verified_by: >-
+        DMM at U4 pin 1 referenced to U4 pin 7, bench supply +5.0 V limited to
+        300 mA. Exact reading not recorded, only that it met 3.3 V +/- 0.1 V.
+      reference_voltage_confirmed: false
+    rail_tie:
+      # Two 0-ohm links land the BBB's own 3.3 V and the LDO output on the same
+      # net. Checked on the board 2026-08-18: only R25 is fitted.
+      R24: {connects: "P9_3/P9_4 (BBB 3.3V) <-> +3.3V net", populated: false}
+      R25: {connects: "U9 OUT <-> +3.3V net", populated: true}
+      verified_on: 2026-08-18
+      consequence: >-
+        The BBB's own 3.3 V pins are isolated from the board. Every 3.3 V amp
+        on this board comes from U9, whose only input is +5 V on P9_5/P9_6. So
+        the supply contention this pair could have caused does not exist, and
+        the board can later be run from a BBB without removing a link. It also
+        means P9_3/P9_4 are dead pins: nothing is powered by touching them.
+    indicator: {reference: D10, series: R26 330 ohm, note: lights only above the LED forward drop}
+    estimated_load_ma: 150
+    estimated_load_basis: >-
+      MachXO2-4000HC static plus two AD9744 supplies plus the EEPROM, LED and
+      pull-ups. Component-level estimate from the schematic, not measured and
+      not taken from datasheets.
+    bench_supply_current_limit_ma: 300
+
+  analog:
+    input: CN1 (Molex 5268-03)
+    pins: {1: "-15V", 2: GND, 3: "+15V"}
+    feeds: [U5, U7]
+    # This connector is the only control over the analog path.
+    gate1_action: DO_NOT_CONNECT
+
+dac:
+  model: AD9744ARUZRL7
+  resolution_bits: 14
+  interface: parallel
+  channels_on_board: 2
+  update_signal: CLOCK
+  setup_time_ns: 2.0
+  hold_time_ns: 1.5
+  latch_pulse_width_ns: 1.5
+  capture_edge: rising
+  settling_time_ns: null
+  timing_source: Analog Devices AD9744 Rev. C datasheet, Figure 2 and specifications table
+  # Pins seen on the schematic that bear on whether the analog path is live
+  # during Gate 1. None of them is traced to its driver yet.
+  references: {U6: DAC1, U1: DAC2}
+  full_scale_set_resistor: 2k (R4, R1) on FS ADJ
+  output_load: 51 ohm on IOUTA and IOUTB (R5/R6, R2/R3)
+  # Neither device can be shut down by any signal. Both control pins are
+  # hard-wired to their active states, so "disable the DAC in firmware" is not
+  # available and must not appear in any procedure.
+  disable_controls:
+    dac_sleep_pin: {present: true, tied_to: GND, meaning: always awake, controllable: false}
+    output_stage_pd: {present: true, signal: "PD#", tied_to: "+15V", meaning: always enabled, controllable: false}
+  outputs: [DAC1_OUT, DAC2_OUT]
+
+analog_output_stage:
+  references: {U5: DAC1 path, U7: DAC2 path}
+  part: THS3491IRGTR
+  supply: "+/-15V from CN1 only"
+  gain: ~10.1 (R8 576 / R7 63.4, non-inverting)
+  series_output: 49.9 ohm (R9, R12)
+  connectors: {RF1: DAC1 path, RF2: DAC2 path}
+  # This is the whole basis for gate1-test-spec forbidding enable_analog_output.
+  gate1_isolation: >-
+    With CN1 unconnected the THS3491 devices have no supply, so RF1 and RF2
+    carry nothing regardless of what the DAC or CPLD does. Since neither
+    SLEEP nor PD# is controllable, leaving CN1 off is the only way to
+    guarantee the analog output is inactive.
+  gate1_residual_note: >-
+    The DAC still sinks current into its 51 ohm loads while the amplifiers are
+    unpowered, so DAC1_OUT and DAC2_OUT sit at up to about -1 V into
+    unpowered op-amp inputs. Bounded by the 19 mA full-scale current and
+    within the AD9744 compliance range, but worth measuring rather than
+    assuming during the first power-on.
+  gate1_note: >-
+    gate1_gpio_toggle drives only dbg0, so every CPLD pin on the DAC data bus
+    is an unused I/O. The pad report shows unused pins as inputs with
+    PULL:DOWN, so the CPLD does not drive the bus and never toggles D1CLK or
+    D2CLK. The DAC therefore holds whatever it powers up with rather than
+    following a changing code. Whether the analog output stage is enabled at
+    all is UNVERIFIED and must be checked before power-on.
+signals:
+  configuration_spi:
+    controller: BBB_SPI0
+    mode: 0
+    configured_speed_hz: 1000000
+    pins:
+      MOSI: {bbb_header_pin: P9_18, board_net: SPI.MOSI, cpld_pin: 31, cpld_direction: input}
+      CS: {bbb_header_pin: P9_17, board_net: SPI.CS, cpld_pin: 32, cpld_direction: input, active: low}
+      MISO: {bbb_header_pin: P9_21, board_net: SPI.MISO, cpld_pin: 33, cpld_direction: output}
+      SCLK: {bbb_header_pin: P9_22, board_net: SPI.CLK, cpld_pin: 34, cpld_direction: input}
+    verification_source: RTASE_V1 schematic pages 2 and 4
+  gate3:
+    rf1_demo:
+      select:
+        - {bbb_pru_signal: PRU0_R30_15, bbb_header_pin: P8_11, board_net: SYM.A0, cpld_pin: 85}
+        - {bbb_pru_signal: PRU0_R30_14, bbb_header_pin: P8_12, board_net: SYM.A1, cpld_pin: 84}
+      update:
+        bbb_pru_signal: PRU0_R30_0
+        bbb_header_pin: P9_31
+        board_net: LDAC.A
+        schematic_label_at_cpld: LDASC.A
+        cpld_input_pin: 35
+        dac_clock_net: D1CLK
+        cpld_output_pin: 73
+      dac_data:
+        net: D1B[13:0]
+        cpld_pins_lsb_to_msb: [56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 68, 69, 70, 71]
+      output: RF1
+      verification_source: RTASE_V1 schematic pages 1 through 4
+  gate2:
+    bbb_cpld_loopback:
+      bbb_pru_signal: PRU0_R30_15
+      bbb_header_pin: P8_11
+      board_net: SYM.A0
+      cpld_input_pin: 85
+      cpld_input_site: PR13B
+      observation_pin: 117
+      observation_site: PT24A
+      verification_source: RTASE_V1 schematic pages 2 and 4
+  gate1:
+    proposed_probe:
+      signal: dbg0
+      cpld_pin: 117
+      site: PT24A
+      io_type: LVCMOS33
+      board_net: NC
+      access: temporary_wire_to_pin_117
+      approved: true
+      approved_on: 2026-08-18
+      approved_by: user
+      verification:
+        adjacent_pin_116_gnd_short: false
+        adjacent_pin_118_vccio0_short: false
+        scope_channel: CH3
+        probe_attenuation: "10:1"
+        probe_ground: U4_pin_7
+      blocker: null
+      # Electrical isolation confirmed 2026-08-14 from the schematic
+      # (QKD_PROJ/gate1-cpld-left-pins.png): pin 117 / PT24A is drawn with an
+      # unconnected terminal, unlike neighbouring pins 118 VCCIO0, 116 GND and
+      # 124 GND which carry wires and junction dots. Driving it cannot reach
+      # any board net. Physical access was resolved with a temporary wire and
+      # the user confirmed no short to adjacent pins 116 or 118.
+      schematic_connection: none
+      isolation_verified_on: 2026-08-14
+    existing_constraint_discrepancy:
+      sel0:
+        constrained_pin: 35
+        schematic_net: LDASC.A
+        source_comment_claim: BBB_P8_45
+      sel1:
+        constrained_pin: 34
+        schematic_net: SPI.CLK
+        source_comment_claim: BBB_P8_46
+  pd_trigger:
+    pru_pin: UNVERIFIED
+    voltage_v: null
+    polarity: rising
+    min_pulse_width_ns: null
+  select:
+    - {name: SEL0, pru_pin: UNVERIFIED, cpld_pin: UNVERIFIED, voltage_v: null}
+    - {name: SEL1, pru_pin: UNVERIFIED, cpld_pin: UNVERIFIED, voltage_v: null}
+  dac_update:
+    pru_pin: UNVERIFIED
+    dac_pin: UNVERIFIED
+    voltage_v: null
+  dac_data:
+    width: 14
+    mapping: []
+scope:
+  model: RTM3004
+  manufacturer: Rohde&Schwarz
+  serial: 1335.8794k04/106125
+  firmware: "01.700"
+  resource: TCPIP::192.168.50.3::5025::SOCKET
+  host: 192.168.50.3
+  port: 5025
+  verified: true
+  verified_on: 2026-08-13
+  verified_by: "*IDN? / *OPT? over SCPI from this PC (192.168.50.1/24, Realtek USB 2.5GbE)"
+  options:
+    raw: "K1,K2,K3,K5,B1,K31,K6,K7,K15,B6,B245,K36,K37"
+    relevant:
+      B1: Mixed signal option, 16 logic channels
+      B6: Function/arbitrary waveform generator
+      K15: History and segmented memory
+      K37: Spectrum analysis
+  # Input termination is selected through CHANnel<m>:COUPling, not through a
+  # separate impedance command. Confirmed in the RTM3000 user manual:
+  #   DC       = direct connection with 50 ohm termination
+  #   DCLimit  = 1 Mohm
+  # Reading it wrong loads the DUT. See gate1_probe_constraint below.
+  coupling_meaning:
+    DC: 50_ohm
+    DCLimit: 1_Mohm
+    ACLimit: 1_Mohm_ac
+  measured_state_2026_08_13:
+    CH1: {coupling: DC, termination: 50_ohm, probe_attenuation: 1}
+    CH2: {coupling: DC, termination: 50_ohm, probe_attenuation: 1}
+    CH3: {coupling: DCLimit, termination: 1_Mohm, probe_attenuation: 1}
+    CH4: {coupling: DCLimit, termination: 1_Mohm, probe_attenuation: 1}
+    note: No probe was auto-detected on any channel (PROBe:SETup:MODE = RCON,
+      attenuation 1:1, impedance UNKN).
+  gate1_probe_constraint:
+    rule: Gate 1 GPIO measurement must use a 1 Mohm input.
+    reason: >-
+      The dbg0 output is LVCMOS33 at 4 mA drive. A 50 ohm input would demand
+      about 66 mA at 3.3 V, so the level would collapse below the 2.4 V
+      high_v_min in gate1-test-spec.yaml and the pin would be stressed. The
+      result would look like a failing design when the real fault is the
+      termination.
+    allowed_channels: [CH3, CH4]
+    or_switch_coupling_to: DCLimit
+  channels:
+    trigger: CH1
+    select: CH2
+    update: CH3
+    analog_output: CH4
+
+bbb:
+  # The compute half of the stack. RTASE_V1 is a BBB cape, so every signal in
+  # `signals:` above lands on a BBB header pin -- what the BBB drives at boot is
+  # therefore a property of this board too. Gate 1 sidestepped all of this by
+  # running the cape unstacked off a bench supply. Stacked operation (gate2,
+  # gate3) does not have that option, so this section has to be filled from the
+  # running system before deploy_pru() or run_bbb() may do anything.
+  #
+  # Everything UNVERIFIED here is deliberate: a tool that depends on one of
+  # these fields must refuse rather than assume. Nothing below has been checked
+  # against the actual unit yet.
+  role: PRU signal source for gate2 (loopback) and gate3 (RF1 demo)
+
+  board:
+    model: BeagleBone Black
+    revision: UNVERIFIED
+    verified: false
+
+  os:
+    image: UNVERIFIED          # which Debian/kernel image is flashed
+    kernel: UNVERIFIED
+    verified: false
+
+  access:
+    # How the automation reaches the BBB. Required before any tool exists.
+    method: UNVERIFIED         # ssh over ethernet | usb gadget | serial console
+    host: UNVERIFIED
+    user: UNVERIFIED
+    auth: UNVERIFIED           # key file path. Never store a password here.
+    verified: false
+
+  pru:
+    subsystem: PRU0            # gate2/gate3 both use PRU0 R30 outputs
+    framework: UNVERIFIED      # remoteproc | uio_pruss -- decides the whole tool
+    remoteproc_path: UNVERIFIED
+    firmware_dir: UNVERIFIED
+    firmware_name: UNVERIFIED
+    toolchain:
+      compiler: UNVERIFIED     # clpru | pru-gcc
+      version: UNVERIFIED
+      runs_on: UNVERIFIED      # on the BBB, or cross-compiled on this PC
+    # The PRU instruction rate is the basis for every delay figure in the gate3
+    # sweep, so it is not taken on reputation. AM335x PRU-ICSS is expected to be
+    # 200 MHz (5 ns per instruction) but the TRM is not present locally and the
+    # rate has not been measured on this unit.
+    clock_mhz: UNVERIFIED
+    clock_expected_mhz: 200
+    clock_source_needed: "AM335x TRM (PRU-ICSS section), or measure a known loop"
+
+  pinmux:
+    # The safety-bearing part. A pin the BBB drives at boot is a pin the CPLD
+    # cannot own, and Gate 1's isolation argument never had to consider it.
+    # Capture this from the running system -- do not infer it from the image.
+    method: UNVERIFIED         # config-pin | device tree overlay | u-boot overlay
+    boot_state_captured: false
+    pins_used_by_gate3:
+      - {header_pin: P8_11, pru_signal: PRU0_R30_15, board_net: SYM.A0, cpld_pin: 85, boot_default: UNVERIFIED}
+      - {header_pin: P8_12, pru_signal: PRU0_R30_14, board_net: SYM.A1, cpld_pin: 84, boot_default: UNVERIFIED}
+      - {header_pin: P9_31, pru_signal: PRU0_R30_0,  board_net: LDAC.A, cpld_pin: 35, boot_default: UNVERIFIED}
+
+  power:
+    # Confirmed from the rail_tie finding under `power:` above -- R24 is not
+    # populated, so the BBB's own 3.3 V is isolated from the board and the cape
+    # can run from a stacked BBB with no link change.
+    supplies_to_cape: ["+5V on P9_5/P9_6"]
+    does_not_supply: ["+15V", "-15V"]   # CN1 only. See analog_output_stage.
+    supply_isolation_verified: true
+    supply_isolation_verified_on: 2026-08-18
+    # A wall adapter has no current limit; the bench supply provided 300 mA.
+    # Neither the limit in use nor the actual draw has been recorded.
+    current_limit_ma: UNVERIFIED
+    measured_load_ma: UNVERIFIED

@@ -1,0 +1,57 @@
+{
+  "run": "gate12_pru_dac1_sram",
+  "started_at": "2026-08-21T01:25:43+00:00",
+  "updated_at": "2026-08-21T01:25:43+00:00",
+  "verdict": "FAIL",
+  "contract": {
+    "test_id": "gate12-pru-dac1-plan",
+    "status": "approved_for_one_sram_digital_execution",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate12-pru-dac1-plan.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ],
+    "forbidden_operations": [
+      "drive_D2CLK",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483,
+    "exact_user_io_count": 22,
+    "exact_dac_channel_outputs": [
+      "D1B",
+      "D1CLK"
+    ],
+    "prohibited_outputs_absent": [
+      "D2B",
+      "D2CLK"
+    ]
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": false,
+      "started_at": "2026-08-21T01:25:43+00:00",
+      "duration_s": 0.001,
+      "commands": [],
+      "measurements": {},
+      "verdict": "FAIL",
+      "artifacts": [],
+      "warnings": [],
+      "error": "KeyError: 'jtag'",
+      "versions": {}
+    }
+  ],
+  "artifacts": []
+}

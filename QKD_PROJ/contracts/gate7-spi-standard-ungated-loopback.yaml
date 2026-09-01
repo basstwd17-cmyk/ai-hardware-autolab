@@ -1,0 +1,84 @@
+schema_version: 1
+test_id: gate7-spi-standard-ungated-loopback
+status: candidate_approved
+
+purpose:
+  - Isolate the production-standard BBB SPI0 data path without CS, SCLK, DAC, SMA, or PRU outputs.
+  - Echo U2 pin 31 directly to U2 pin 33 under the standard SPI0 pinmux.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program, readback_or_program_status]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_standard_ungated_loopback
+  sources:
+    hdl: QKD_PROJ/spi_standard_ungated_loopback/spi_standard_ungated_loopback.v
+    constraints: QKD_PROJ/spi_standard_ungated_loopback/spi_standard_ungated_loopback.lpf
+  signal_path:
+    source: {bbb_pin: P9_18, cpld_pin: 31, direction: input}
+    return: {cpld_pin: 33, bbb_pin: P9_21, direction: output}
+    excluded: [P9_17_CS, P9_22_SCLK]
+  prerequisite_overlay: BB-RTASE-A-00A0.dtbo
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 2
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+  echo_must_equal_transmit: true
+
+build_result:
+  status: passed
+  run: 20260819T052520Z_gate7_spi_standard_ungated_loopback_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  source_sha256:
+    spi_standard_ungated_loopback.v: c9e88fed91620056dd95014fc5f391839769257116c2a74c5d87f04d5af7dd4f
+    spi_standard_ungated_loopback.lpf: f60d7f1acf005c9bf5c581b6962a836eefe36f8fc43093b6fe38fc5c0d47d7b9
+  bitstream_sha256: 88d2f1dfba8b3bc19ff91d6ed2d8b6afeda4767cc3263628a1f45b8d62162f2d
+  bitstream_design_sha256: 2cf342beda0c0e31456c9fd6dac9c175d9278a70fb70feb23aa5dd88fe399d31
+  bitstream_bytes: 16041
+  placed_io:
+    spi_from_bbb_d1: {pin: 31, buffer: LVCMOS33_IN}
+    spi_to_bbb_d0: {pin: 33, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+
+sram_program_candidate:
+  status: executed_awaiting_echo
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-19
+  approval_scope: one volatile SRAM program after standard BBB SPI pinmux is verified active, followed by 100 kHz and 10 kHz echo reads
+  directory: QKD_PROJ/candidates/gate7-spi-standard-ungated-loopback
+  bitstream: spi_standard_ungated_loopback_impl1.bit
+  bitstream_sha256: 88d2f1dfba8b3bc19ff91d6ed2d8b6afeda4767cc3263628a1f45b8d62162f2d
+  bitstream_design_sha256: 2cf342beda0c0e31456c9fd6dac9c175d9278a70fb70feb23aa5dd88fe399d31
+  bitstream_bytes: 16041
+  source_sha256:
+    spi_standard_ungated_loopback.v: c9e88fed91620056dd95014fc5f391839769257116c2a74c5d87f04d5af7dd4f
+    spi_standard_ungated_loopback.lpf: f60d7f1acf005c9bf5c581b6962a836eefe36f8fc43093b6fe38fc5c0d47d7b9
+  companion_sha256:
+    spi_standard_ungated_loopback_impl1.pad: 05bc8096f59c58e917fb5464b75480b2371dcc7f14173d93e8fcbe196e3cd896
+    build.log: 6959881171a830482f1537c7f0fdfeebc815a5f4eb1d0900ab1b9b19c73ffa9c
+    manifest.json: b8ecaeab0b314babe403cf17562cae18f7cff42539ec07220ebf12219681ca17
+  immutable: true
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260819T053803Z_gate7_spi_standard_ungated_loopback_sram
+  execution_result: PASS_echo_failed
+  echo_result:
+    speed_hz_tested: [100000, 10000]
+    tx: 00ffaa553cc3
+    rx: 000000000000
+    conclusion: standard_cs_independent_data_path_failed
+
+stop_conditions:
+  - Any DAC data, D1CLK, D2CLK, PRU, or analog-output pin is configured as an output.
+  - U2 pin 31 is not a 3.3 V LVCMOS input.
+  - U2 pin 33 is not a 3.3 V LVCMOS output with 4 mA slow slew.

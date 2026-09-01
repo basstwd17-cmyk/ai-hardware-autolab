@@ -1,0 +1,84 @@
+schema_version: 1
+board_id: b-g474e-dpow1
+revision: default
+title: ST B-G474E-DPOW1 discovery board onboarding profile
+aliases: [b-g474e-dpow1, g474e dpow1, stm32g474 hrtim delay]
+board_map: QKD_PROJ/boards/b-g474e-dpow1/default/board-map.yaml
+sources:
+  - id: local-project
+    title: Existing STM32CubeIDE HRTIM project
+    source_kind: reviewed-local-project
+    location: STM32Cube/stm32g474-hrtim-delay/README.md
+  - id: board-manual
+    title: B-G474E-DPOW1 user manual
+    source_kind: vendor-board-manual
+    location: https://www.st.com/resource/en/user_manual/um2577-discovery-kit-with-stm32g474re-mcu-stmicroelectronics.pdf
+  - id: mcu-datasheet
+    title: STM32G474RE datasheet
+    source_kind: vendor-datasheet
+    location: https://www.st.com/resource/en/datasheet/stm32g474re.pdf
+  - id: mcu-reference-manual
+    title: STM32G4 reference manual
+    source_kind: vendor-reference-manual
+    location: https://www.st.com/resource/en/reference_manual/rm0440-stm32g4-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+stages:
+  - id: research-primary-sources
+    phase: research
+    mode: offline
+    agent: researcher
+    tool: read_contract
+    status: ready
+    requires_campaign: false
+    command: []
+    cwd: null
+    artifacts: []
+  - id: design-firmware
+    phase: design
+    mode: offline
+    agent: null
+    tool: null
+    status: adapter_required
+    requires_campaign: false
+    command: []
+    cwd: null
+    artifacts: []
+  - id: build-firmware
+    phase: build
+    mode: offline
+    agent: null
+    tool: null
+    status: adapter_required
+    requires_campaign: false
+    command: []
+    cwd: null
+    artifacts: []
+  - id: upload-firmware
+    phase: upload
+    mode: hardware
+    agent: null
+    tool: null
+    status: adapter_required
+    requires_campaign: true
+    command: []
+    cwd: null
+    artifacts: []
+  - id: measure-output
+    phase: measure
+    mode: hardware
+    agent: null
+    tool: null
+    status: adapter_required
+    requires_campaign: true
+    command: []
+    cwd: null
+    artifacts: []
+  - id: verify-evidence
+    phase: verify
+    mode: offline
+    agent: verifier
+    tool: read_run
+    status: ready
+    requires_campaign: false
+    command: []
+    cwd: null
+    artifacts: [verdict, report]

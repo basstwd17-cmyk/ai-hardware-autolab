@@ -1,0 +1,223 @@
+{
+  "run": "gate1_sram_program",
+  "started_at": "2026-08-18T02:28:45+00:00",
+  "updated_at": "2026-08-18T02:29:05+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate1-jtag-sram-gpio",
+    "status": "blocked_pending_human_review",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate1-test-spec.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan",
+      "oscilloscope_capture",
+      "power_off_continuity_check",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ],
+    "forbidden_operations": [
+      "drive_any_D1B_or_D2B_bus",
+      "drive_pin_34_SPI_CLK",
+      "drive_pin_35_LDASC_A",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "power_board_without_current_limit"
+    ]
+  },
+  "pass_criteria": {
+    "consecutive_runs": 3,
+    "build_errors": 0,
+    "build_warnings_requiring_review": 0,
+    "expected_device_count": 1,
+    "expected_idcode": "0x012BC043",
+    "sram_program_success": true,
+    "voltage_limit_violations": 0,
+    "waveform_frequency_tolerance_percent": null,
+    "waveform_must_toggle": true,
+    "waveform_minimum_observed_edges": 4
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": true,
+      "started_at": "2026-08-18T02:28:45+00:00",
+      "duration_s": 12.735,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pgrcmd.exe -infile C:\\KIST\\QKD_PROJ\\contracts\\gate1-scan-only.xcf -logfile C:\\KIST\\QKD_PROJ\\runs\\20260818T022845Z_gate1_sram_program\\jtag_scan.pgrcmd.log -processtype sequential -cabletype usb2 -portaddress FTUSB-0 -TCK 10"
+      ],
+      "measurements": {
+        "expected_device_count": 1,
+        "expected_idcode": "0x012BC043",
+        "device": "LCMXO2-4000HC",
+        "cable_type": "USB2",
+        "port": "FTUSB-0",
+        "tck_divider": 10,
+        "returncode": 0,
+        "chain_verified": true,
+        "device_count": 1,
+        "device_count_source": "pgrcmd_log",
+        "idcodes": [
+          "0x012BC043"
+        ],
+        "idcode": "0x012BC043",
+        "idcode_source": "verified_xcf_chain",
+        "observed_devices": [
+          "LCMXO2-4000HC"
+        ]
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "gate1-scan-only.xcf",
+          "kind": "jtag_scan_xcf",
+          "sha256": "70d60e7e66f1a4e93c43a570e8ca757eebf2c6c8aa607b4c2dcc406e8f57da70",
+          "size_bytes": 1343
+        },
+        {
+          "path": "jtag_scan.pgrcmd.log",
+          "kind": "pgrcmd_log",
+          "sha256": "d6ff230e3529d9b4dc0715df8018057fa1bb550a1d4a4288a73859e0d15343d8",
+          "size_bytes": 672
+        },
+        {
+          "path": "jtag_scan.transcript.log",
+          "kind": "command_transcript",
+          "sha256": "1dbaee9882e0557f027e4bc7176a65b35aa6643d493b6db00eb657d1c28c7950",
+          "size_bytes": 1681
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "xcf": "3.14",
+        "diamond_root": "C:\\lscc\\diamond\\3.14"
+      }
+    },
+    {
+      "tool": "cpld",
+      "action": "program_sram",
+      "ok": true,
+      "started_at": "2026-08-18T02:28:58+00:00",
+      "duration_s": 7.179,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pgrcmd.exe -infile C:\\KIST\\QKD_PROJ\\contracts\\gate1-sram-program.xcf -logfile C:\\KIST\\QKD_PROJ\\runs\\20260818T022845Z_gate1_sram_program\\sram_program.pgrcmd.log -processtype sequential -cabletype usb2 -portaddress FTUSB-0 -TCK 10"
+      ],
+      "measurements": {
+        "approved_bitstream_sha256": "c656c41ab34df655fb1d638d4af25439ff45fd3f70a73692fad3519085463910",
+        "programmed_bitstream_sha256": "c656c41ab34df655fb1d638d4af25439ff45fd3f70a73692fad3519085463910",
+        "bitstream_design_sha256": "71c6be3a3b01b00b0d94f1af329529dff83f4711545597cba777722e2c961866",
+        "bitstream_bytes": 16271,
+        "bitstream_header": {
+          "Design name": "gate1_gpio_toggle_impl1.ncd",
+          "Part": "LCMXO2-4000HC-4TQFP144",
+          "Readback": "Off",
+          "Security": "Off",
+          "Bitstream CRC": "0x4E7E"
+        },
+        "source_sha256": {
+          "gate1_gpio_toggle.v": "80f744afedc6ef78ada9993b938cee5385fb3bde940d1e269f430f627e18dbf1",
+          "gate1_gpio_toggle.lpf": "3d157ed8897fcfe1954ac70cc7c7d1aa98c0de0d53742f11a2d602e8f0fb0b45"
+        },
+        "approval": {
+          "approved_by": "user",
+          "approved_on": "2026-08-18",
+          "execution_number": 1
+        },
+        "program_xcf_sha256": "c06367f76958ad0977867858cadf25ac0e75b13c32c0a0bd8ae46129db5dd149",
+        "device": "LCMXO2-4000HC",
+        "expected_idcode": "0x012BC043",
+        "cable_type": "USB2",
+        "port": "FTUSB-0",
+        "tck_divider": 10,
+        "jedec_checksum": "0X0A77",
+        "returncode": 0,
+        "chain_verified": true,
+        "observed_devices": [
+          "LCMXO2-4000HC"
+        ],
+        "program_done": true,
+        "operation_successful": true,
+        "program_success": true
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "gate1_gpio_toggle_impl1.bit",
+          "kind": "approved_bitstream",
+          "sha256": "c656c41ab34df655fb1d638d4af25439ff45fd3f70a73692fad3519085463910",
+          "size_bytes": 16271
+        },
+        {
+          "path": "gate1-sram-program.xcf",
+          "kind": "sram_program_xcf",
+          "sha256": "c06367f76958ad0977867858cadf25ac0e75b13c32c0a0bd8ae46129db5dd149",
+          "size_bytes": 1625
+        },
+        {
+          "path": "sram_program.pgrcmd.log",
+          "kind": "pgrcmd_log",
+          "sha256": "0be7e9e96b1293e9c73d0a10de790b2dbcd0203f6472f2a122d8702231ad1da4",
+          "size_bytes": 675
+        },
+        {
+          "path": "sram_program.transcript.log",
+          "kind": "command_transcript",
+          "sha256": "818e81c801a061c158dfe5ec24ef5c2ca0994725da099cf6ca79e3791848f320",
+          "size_bytes": 1696
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "gate1-scan-only.xcf",
+      "kind": "jtag_scan_xcf",
+      "sha256": "70d60e7e66f1a4e93c43a570e8ca757eebf2c6c8aa607b4c2dcc406e8f57da70",
+      "size_bytes": 1343
+    },
+    {
+      "path": "jtag_scan.pgrcmd.log",
+      "kind": "pgrcmd_log",
+      "sha256": "d6ff230e3529d9b4dc0715df8018057fa1bb550a1d4a4288a73859e0d15343d8",
+      "size_bytes": 672
+    },
+    {
+      "path": "jtag_scan.transcript.log",
+      "kind": "command_transcript",
+      "sha256": "1dbaee9882e0557f027e4bc7176a65b35aa6643d493b6db00eb657d1c28c7950",
+      "size_bytes": 1681
+    },
+    {
+      "path": "gate1_gpio_toggle_impl1.bit",
+      "kind": "approved_bitstream",
+      "sha256": "c656c41ab34df655fb1d638d4af25439ff45fd3f70a73692fad3519085463910",
+      "size_bytes": 16271
+    },
+    {
+      "path": "gate1-sram-program.xcf",
+      "kind": "sram_program_xcf",
+      "sha256": "c06367f76958ad0977867858cadf25ac0e75b13c32c0a0bd8ae46129db5dd149",
+      "size_bytes": 1625
+    },
+    {
+      "path": "sram_program.pgrcmd.log",
+      "kind": "pgrcmd_log",
+      "sha256": "0be7e9e96b1293e9c73d0a10de790b2dbcd0203f6472f2a122d8702231ad1da4",
+      "size_bytes": 675
+    },
+    {
+      "path": "sram_program.transcript.log",
+      "kind": "command_transcript",
+      "sha256": "818e81c801a061c158dfe5ec24ef5c2ca0994725da099cf6ca79e3791848f320",
+      "size_bytes": 1696
+    }
+  ]
+}

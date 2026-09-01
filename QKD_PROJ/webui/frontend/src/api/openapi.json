@@ -1,0 +1,2613 @@
+{
+  "components": {
+    "schemas": {
+      "AgentCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentProfile"
+            },
+            "title": "Agents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agents"
+        ],
+        "title": "AgentCatalog",
+        "type": "object"
+      },
+      "AgentProfile": {
+        "additionalProperties": false,
+        "description": "The reviewable, non-prompt half of one runtime agent definition.",
+        "properties": {
+          "consumes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Consumes",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "emits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Emits",
+            "type": "array"
+          },
+          "localTools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Localtools",
+            "type": "array"
+          },
+          "mcpTools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mcptools",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nativeWeb": {
+            "title": "Nativeweb",
+            "type": "boolean"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "touchesHardware": {
+            "title": "Toucheshardware",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "description",
+          "mcpTools",
+          "localTools",
+          "skills",
+          "consumes",
+          "emits",
+          "touchesHardware",
+          "nativeWeb"
+        ],
+        "title": "AgentProfile",
+        "type": "object"
+      },
+      "ApprovalRow": {
+        "additionalProperties": true,
+        "description": "A pending approval. Extra keys are kept: the ledger owns this shape.",
+        "properties": {
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "artifacts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Artifacts",
+            "type": "object"
+          },
+          "bundle_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Sha256"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "max_executions": {
+            "default": 1,
+            "title": "Max Executions",
+            "type": "integer"
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "default": "",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_id",
+          "job_id",
+          "contract",
+          "step_id",
+          "scope",
+          "requested_at",
+          "state"
+        ],
+        "title": "ApprovalRow",
+        "type": "object"
+      },
+      "ArtifactMetadata": {
+        "additionalProperties": false,
+        "description": "The path-free half of a registration. The only half a browser gets.",
+        "properties": {
+          "artifactId": {
+            "title": "Artifactid",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId"
+        ],
+        "title": "ArtifactMetadata",
+        "type": "object"
+      },
+      "ArtifactOpened": {
+        "additionalProperties": false,
+        "description": "The acknowledgement a click gets. No path: the host keeps that.",
+        "properties": {
+          "artifactId": {
+            "title": "Artifactid",
+            "type": "string"
+          },
+          "jobId": {
+            "title": "Jobid",
+            "type": "string"
+          },
+          "kind": {
+            "description": "file or directory - what was revealed, not where",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "jobId",
+          "artifactId",
+          "kind"
+        ],
+        "title": "ArtifactOpened",
+        "type": "object"
+      },
+      "CommandResponse": {
+        "additionalProperties": true,
+        "description": "A daemon ``command.result``. ``ok`` false is an answer, not a failure.",
+        "properties": {
+          "commandId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commandid"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "CommandResponse",
+        "type": "object"
+      },
+      "DaemonStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "pipe name or tcp:// address of the daemon",
+            "title": "Address",
+            "type": "string"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "cursor": {
+            "description": "the last global event_id actually applied",
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "gaps": {
+            "title": "Gaps",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "daemon tool profile: offline or hardware",
+            "title": "Profile"
+          },
+          "workspace_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "shared checkout or isolated per-job workspace",
+            "title": "Workspace Mode"
+          }
+        },
+        "required": [
+          "address",
+          "connected",
+          "cursor",
+          "attempts",
+          "frames",
+          "gaps"
+        ],
+        "title": "DaemonStatus",
+        "type": "object"
+      },
+      "EdgeEvidence": {
+        "additionalProperties": false,
+        "description": "Why this edge exists, in terms a reader can go and check.\n\n``field`` names the field the relationship was read out of, ``value`` is\nwhat it held, and ``source_event_id`` is the ledger cursor that carried it\n-- or ``None`` when the relationship came from a file (a contract's own\n``test_id``, a run manifest's ``test_spec``) rather than from a row. An\nedge cannot claim a cursor a ledger row never said.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "source_event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event Id"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source_event_id"
+        ],
+        "title": "EdgeEvidence",
+        "type": "object"
+      },
+      "EventsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "oldest": {
+            "description": "lowest event_id still in memory; below it, replay",
+            "title": "Oldest",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "cursor",
+          "oldest"
+        ],
+        "title": "EventsResponse",
+        "type": "object"
+      },
+      "GraphEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/EdgeEvidence"
+          },
+          "id": {
+            "description": "edge:{kind}:{source}:{target}:{field} - derived, so stable",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target",
+          "kind",
+          "evidence"
+        ],
+        "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphLayout": {
+        "additionalProperties": false,
+        "description": "Where the user put things. The only state in this app they author.",
+        "properties": {
+          "positions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Position"
+            },
+            "title": "Positions",
+            "type": "object"
+          },
+          "revision": {
+            "description": "bumped on every write; a save must name the one it is replacing",
+            "title": "Revision",
+            "type": "integer"
+          },
+          "unreadable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "set when the file on disk could not be interpreted; it was left alone",
+            "title": "Unreadable"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "revision",
+          "positions",
+          "unreadable"
+        ],
+        "title": "GraphLayout",
+        "type": "object"
+      },
+      "GraphNode": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "kind-prefixed and scoped, e.g. artifact:{jobId}:{artifactId}",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "description": "browser-safe facts only: never a path, a token or a pipe address",
+            "title": "Metadata",
+            "type": "object"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "job state, and only from the control plane's status",
+            "title": "Status"
+          },
+          "unresolved": {
+            "description": "the ledger named it; nothing has filled in its details yet",
+            "title": "Unresolved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "status",
+          "unresolved",
+          "metadata"
+        ],
+        "title": "GraphNode",
+        "type": "object"
+      },
+      "GraphSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "description": "the ledger cursor this graph has applied up to",
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "generatedAt": {
+            "title": "Generatedat",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cursor",
+          "nodes",
+          "edges",
+          "generatedAt"
+        ],
+        "title": "GraphSnapshot",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandoffDetail": {
+        "additionalProperties": false,
+        "description": "One durable agent-to-agent envelope, read only for its own job.",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the ledger event that announced this envelope, when it has one",
+            "title": "Event Id"
+          },
+          "failure_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Signature"
+          },
+          "handoff_id": {
+            "title": "Handoff Id",
+            "type": "string"
+          },
+          "iteration": {
+            "title": "Iteration",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "description": "the envelope body the next agent received",
+            "title": "Payload",
+            "type": "object"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "step_id": {
+            "default": "",
+            "title": "Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handoff_id",
+          "job_id",
+          "iteration",
+          "kind",
+          "agent",
+          "at",
+          "payload",
+          "sha256"
+        ],
+        "title": "HandoffDetail",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "daemon": {
+            "$ref": "#/components/schemas/DaemonStatus"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "daemon"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "JobDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "default": 0,
+            "description": "the last event_id in this page",
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "events": {
+            "description": "from the ledger, not the capped projection: a transcript wants all of it",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "job": {
+            "additionalProperties": true,
+            "description": "ControlPlane.job resume state; keys depend on progress",
+            "title": "Job",
+            "type": "object"
+          },
+          "latest": {
+            "default": 0,
+            "description": "the ledger tip, so a caller can tell it is behind",
+            "title": "Latest",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "job",
+          "events"
+        ],
+        "title": "JobDetail",
+        "type": "object"
+      },
+      "JobResult": {
+        "additionalProperties": true,
+        "description": "What the daemon reduced a job to.\n\nPassthrough because the verdict-backed, stopped-early and contract-proposal\nshapes differ in which optional fields they carry, and all three are the\ndaemon's to define.\n\nThe contract-proposal fields below are declared so the browser gets types\nfor them rather than reaching into an untyped bag. **`reasonCode` is not an\napproval.** `results.py` copies it from the review's own `outcome`, and the\nreviewer's definition of `ready_for_human_review` is \"no review error or\nrequired change is known\" -- explicitly not approval, and explicitly not\nexecutable. The UI renders it as those words and no others.",
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactMetadata"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "contractDraft": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the ContractDraft envelope verbatim; not a file artifact",
+            "title": "Contractdraft"
+          },
+          "contractDraftSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contractdraftsha256"
+          },
+          "contractReview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the ContractReview envelope verbatim, findings and all",
+            "title": "Contractreview"
+          },
+          "contractReviewSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contractreviewsha256"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate"
+          },
+          "iteration": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iteration"
+          },
+          "jobId": {
+            "title": "Jobid",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "reasonCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the review's own outcome; never an approval state",
+            "title": "Reasoncode"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "verdictSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdictsha256"
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "title": "JobResult",
+        "type": "object"
+      },
+      "JobRow": {
+        "additionalProperties": false,
+        "description": "A ledger row, as returned when no daemon is attached.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "gate": {
+            "title": "Gate",
+            "type": "string"
+          },
+          "iteration": {
+            "title": "Iteration",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "gate",
+          "objective",
+          "state",
+          "iteration",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobRow",
+        "type": "object"
+      },
+      "LayoutConflictBody": {
+        "additionalProperties": false,
+        "description": "A 409 that carries the layout back, so the client can merge and retry.",
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/GraphLayout"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "ok": {
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detail",
+          "current"
+        ],
+        "title": "LayoutConflictBody",
+        "type": "object"
+      },
+      "LayoutSave": {
+        "additionalProperties": false,
+        "properties": {
+          "positions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Position"
+            },
+            "title": "Positions",
+            "type": "object"
+          },
+          "revision": {
+            "description": "the revision this save is replacing",
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "positions"
+        ],
+        "title": "LayoutSave",
+        "type": "object"
+      },
+      "LedgerEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "at": {
+            "default": "",
+            "title": "At",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "global cursor; unique and gapless",
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "description": "free-form by design: whatever the runtime notification carried",
+            "title": "Payload",
+            "type": "object"
+          },
+          "seq": {
+            "default": 0,
+            "description": "orders one job only, never the stream",
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "job_id"
+        ],
+        "title": "LedgerEvent",
+        "type": "object"
+      },
+      "Occupant": {
+        "additionalProperties": false,
+        "description": "One character on the office floor.",
+        "properties": {
+          "activity": {
+            "description": "animation only - never a job state, a verdict or an approval",
+            "title": "Activity",
+            "type": "string"
+          },
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "jobId": {
+            "title": "Jobid",
+            "type": "string"
+          },
+          "seenAt": {
+            "description": "an event_id, not a clock: replays must agree",
+            "title": "Seenat",
+            "type": "integer"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "jobId",
+          "activity",
+          "detail",
+          "seenAt",
+          "turns"
+        ],
+        "title": "Occupant",
+        "type": "object"
+      },
+      "OfficeSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "occupants": {
+            "items": {
+              "$ref": "#/components/schemas/Occupant"
+            },
+            "title": "Occupants",
+            "type": "array"
+          },
+          "openJobs": {
+            "description": "from the control plane, never re-derived",
+            "items": {
+              "type": "string"
+            },
+            "title": "Openjobs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cursor",
+          "openJobs",
+          "occupants"
+        ],
+        "title": "OfficeSnapshot",
+        "type": "object"
+      },
+      "Position": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Position",
+        "type": "object"
+      },
+      "Refusal": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "ok": {
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
+      "RemoteApprovalCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "durationHours": {
+            "default": 12,
+            "maximum": 72.0,
+            "minimum": 1.0,
+            "title": "Durationhours",
+            "type": "integer"
+          },
+          "jobId": {
+            "minLength": 1,
+            "title": "Jobid",
+            "type": "string"
+          },
+          "maxAutoApprovals": {
+            "default": 24,
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Maxautoapprovals",
+            "type": "integer"
+          },
+          "maxIterations": {
+            "default": 8,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Maxiterations",
+            "type": "integer"
+          },
+          "ttlMinutes": {
+            "default": 720,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Ttlminutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "title": "RemoteApprovalCreate",
+        "type": "object"
+      },
+      "RemoteApprovalCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "proposal": {
+            "additionalProperties": true,
+            "title": "Proposal",
+            "type": "object"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "urls",
+          "expiresAt",
+          "proposal"
+        ],
+        "title": "RemoteApprovalCreated",
+        "type": "object"
+      },
+      "RemoteApprovalDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "approvedBy": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Approvedby",
+            "type": "string"
+          },
+          "comment": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Comment",
+            "type": "string"
+          },
+          "decision": {
+            "default": "approve",
+            "enum": [
+              "approve",
+              "revise"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reviewSha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Reviewsha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approvedBy",
+          "reviewSha256"
+        ],
+        "title": "RemoteApprovalDecision",
+        "type": "object"
+      },
+      "RemoteControlCancel": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requestedBy": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Requestedby",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestedBy"
+        ],
+        "title": "RemoteControlCancel",
+        "type": "object"
+      },
+      "RemoteControlMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "sentBy": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Sentby",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sentBy",
+          "message"
+        ],
+        "title": "RemoteControlMessage",
+        "type": "object"
+      },
+      "RemoteControlStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "additionalProperties": true,
+            "title": "Capability",
+            "type": "object"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job"
+          },
+          "recentEvents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recentevents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "capability",
+          "job"
+        ],
+        "title": "RemoteControlStatus",
+        "type": "object"
+      },
+      "StateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "daemon": {
+            "$ref": "#/components/schemas/DaemonStatus"
+          },
+          "inbox": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRow"
+            },
+            "title": "Inbox",
+            "type": "array"
+          },
+          "jobs": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WaitingRow"
+                },
+                {
+                  "$ref": "#/components/schemas/JobRow"
+                }
+              ]
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JobResult"
+            },
+            "title": "Results",
+            "type": "object"
+          },
+          "snapshot": {
+            "additionalProperties": true,
+            "description": "the control plane's answer verbatim; jobs may be a dict here",
+            "title": "Snapshot",
+            "type": "object"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "daemon",
+          "cursor",
+          "jobs",
+          "inbox",
+          "results",
+          "warnings"
+        ],
+        "title": "StateResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WaitingRow": {
+        "additionalProperties": false,
+        "description": "A scheduler record: why this job is not moving.",
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "attempt": {
+            "default": 0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "state",
+          "status",
+          "detail"
+        ],
+        "title": "WaitingRow",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "RTASE agent platform",
+    "version": "0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/agents": {
+      "get": {
+        "description": "Return the exact permission metadata the runtime definitions carry.\n\nPrompts and source paths stay on the host.  The browser gets enough to\nexplain why an agent was selected and which boundary actually applies,\nwithout maintaining a second, hand-written catalogue that can drift.",
+        "operationId": "agents_api_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "Agents"
+      }
+    },
+    "/api/command": {
+      "post": {
+        "operationId": "command_api_command_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Frame",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command"
+      }
+    },
+    "/api/events": {
+      "get": {
+        "operationId": "events_api_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Since",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events"
+      }
+    },
+    "/api/graph": {
+      "get": {
+        "operationId": "graph_api_graph_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "Graph"
+      }
+    },
+    "/api/graph/layout": {
+      "get": {
+        "operationId": "read_layout_api_graph_layout_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphLayout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "Read Layout"
+      },
+      "put": {
+        "operationId": "save_layout_api_graph_layout_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphLayout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutConflictBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Layout"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "description": "One job, with its history read from the ledger rather than memory.\n\nThe in-memory projection is capped -- it exists so a browser that\nconnects late has something to draw immediately. A transcript is a\ndifferent question: it wants everything this job ever did, including\nrows evicted from that cap. So the events come from the control plane,\nand the live WebSocket appends to them from there on.",
+        "operationId": "job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Since",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job"
+      }
+    },
+    "/api/jobs/{job_id}/artifacts/{artifact_id}/open": {
+      "post": {
+        "description": "Reveal an artifact in the file manager. Never opens, never runs it.\n\nEvery check is re-run now rather than trusted from registration time --\nsee `backend/artifacts.py` for which ones and why.",
+        "operationId": "open_artifact_api_jobs__job_id__artifacts__artifact_id__open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOpened"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Artifact"
+      }
+    },
+    "/api/jobs/{job_id}/handoffs": {
+      "get": {
+        "description": "Read the full, durable results of the selected job.\n\nThis is intentionally not part of the replay stream: runtime animation\nuses small digest events, while this endpoint is opened only when the\noperator asks to read an individual job's work.",
+        "operationId": "handoffs_api_jobs__job_id__handoffs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HandoffDetail"
+                  },
+                  "title": "Response Handoffs Api Jobs  Job Id  Handoffs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handoffs"
+      }
+    },
+    "/api/office": {
+      "get": {
+        "operationId": "office_api_office_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "Office"
+      }
+    },
+    "/api/remote-approvals": {
+      "post": {
+        "operationId": "create_remote_approval_api_remote_approvals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteApprovalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteApprovalCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Remote Approval"
+      }
+    },
+    "/api/state": {
+      "get": {
+        "operationId": "state_api_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          }
+        },
+        "summary": "State"
+      }
+    },
+    "/remote-approval/{token}": {
+      "get": {
+        "operationId": "remote_approval_page_remote_approval__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remote Approval Page"
+      },
+      "post": {
+        "operationId": "decide_remote_approval_remote_approval__token__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Remote Approval"
+      }
+    },
+    "/remote-approval/{token}/cancel": {
+      "post": {
+        "operationId": "remote_control_cancel_remote_approval__token__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteControlCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remote Control Cancel"
+      }
+    },
+    "/remote-approval/{token}/message": {
+      "post": {
+        "operationId": "remote_control_message_remote_approval__token__message_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteControlMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remote Control Message"
+      }
+    },
+    "/remote-approval/{token}/status": {
+      "get": {
+        "operationId": "remote_control_status_remote_approval__token__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteControlStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "no session token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Host or Origin refused"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remote Control Status"
+      }
+    }
+  }
+}

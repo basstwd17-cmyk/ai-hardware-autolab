@@ -1,0 +1,20 @@
+# Keep source text stable across Windows and Linux checkouts. Contract source
+# hashes were calculated from LF files.
+* text=auto eol=lf
+
+# Evidence and signed candidates must retain their exact reviewed bytes.
+QKD_PROJ/candidates/** -text
+QKD_PROJ/runs/** -text
+QKD_PROJ/contracts/*.xcf -text
+*.bit -text
+*.pad -text
+*.log -text
+
+# Binary assets and reference documents.
+*.pdf -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.ttf -text
+*.tgz -text
+*.zip -text

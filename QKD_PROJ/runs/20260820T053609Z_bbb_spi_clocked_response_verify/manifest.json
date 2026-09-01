@@ -1,0 +1,141 @@
+{
+  "run": "bbb_spi_clocked_response_verify",
+  "started_at": "2026-08-20T05:36:09+00:00",
+  "updated_at": "2026-08-20T05:36:16+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate9-bbb-host-tooling",
+    "status": "host_tooling_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate9-bbb-host-tooling.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "bbb_ssh_command",
+      "pru_deploy"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "jtag_scan",
+      "nonvolatile_flash",
+      "oscilloscope_capture",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "expected_model_substring": "AM335x BeagleBone Black",
+    "firmware_build_marker": "Built:",
+    "expected_service_state": "active",
+    "expected_ping_reply_hex": "0101",
+    "expected_status_ok": true,
+    "script_hash_must_match_contract": true,
+    "script_returncode": 0
+  },
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": true,
+      "started_at": "2026-08-20T05:36:09+00:00",
+      "duration_s": 6.691,
+      "commands": [
+        "#!/bin/bash\n# Verify the fixed response from the non-DAC clocked SPI return diagnostic.\nset -u\n\npython3 - <<'PY'\nimport array\nimport ctypes\nimport fcntl\nimport os\n\nDEVICE = \"/dev/spidev0.0\"\nTX = bytes(6)\nEXPECTED = bytes.fromhex(\"a55a3cc3f00f\")\nSPEED = 100000\nREPEATS = 32\n\ndef ioc(direction, kind, number, size):\n    return (direction << 30) | (size << 16) | (kind << 8) | number\n\nRD_MODE, WR_MODE = ioc(2, ord(\"k\"), 1, 1), ioc(1, ord(\"k\"), 1, 1)\nRD_BITS, WR_BITS = ioc(2, ord(\"k\"), 3, 1), ioc(1, ord(\"k\"), 3, 1)\nRD_SPEED, WR_SPEED = ioc(2, ord(\"k\"), 4, 4), ioc(1, ord(\"k\"), 4, 4)\n\nclass Transfer(ctypes.Structure):\n    _fields_ = [(\"tx_buf\", ctypes.c_uint64), (\"rx_buf\", ctypes.c_uint64), (\"len\", ctypes.c_uint32), (\"speed_hz\", ctypes.c_uint32), (\"delay_usecs\", ctypes.c_uint16), (\"bits_per_word\", ctypes.c_uint8), (\"cs_change\", ctypes.c_uint8), (\"tx_nbits\", ctypes.c_uint8), (\"rx_nbits\", ctypes.c_uint8), (\"word_delay_usecs\", ctypes.c_uint8), (\"pad\", ctypes.c_uint8)]\n\nMESSAGE = ioc(1, ord(\"k\"), 0, ctypes.sizeof(Transfer))\n\ndef read(fd, request, code):\n    value = array.array(code, [0])\n    fcntl.ioctl(fd, request, value, True)\n    return value[0]\n\ndef write(fd, request, code, value):\n    fcntl.ioctl(fd, request, array.array(code, [value]))\n\ndef transfer(fd):\n    tx = ctypes.create_string_buffer(TX, len(TX))\n    rx = ctypes.create_string_buffer(len(TX))\n    message = Transfer(ctypes.addressof(tx), ctypes.addressof(rx), len(TX), SPEED, 0, 8, 0, 0, 0, 0, 0)\n    fcntl.ioctl(fd, MESSAGE, bytes(message))\n    return bytes(rx.raw)\n\nfd = os.open(DEVICE, os.O_RDWR)\ntry:\n    original = (read(fd, RD_MODE, \"B\"), read(fd, RD_BITS, \"B\"), read(fd, RD_SPEED, \"I\"))\n    write(fd, WR_MODE, \"B\", 0)\n    write(fd, WR_BITS, \"B\", 8)\n    write(fd, WR_SPEED, \"I\", SPEED)\n    replies = [transfer(fd) for _ in range(REPEATS)]\n    print(\"tx=%s expected=%s matches=%d/%d rx_distinct=%s\" % (TX.hex(), EXPECTED.hex(), sum(reply == EXPECTED for reply in replies), REPEATS, \",\".join(sorted({reply.hex() for reply in replies}))))\nfinally:\n    write(fd, WR_MODE, \"B\", original[0])\n    write(fd, WR_BITS, \"B\", original[1])\n    write(fd, WR_SPEED, \"I\", original[2])\n    os.close(fd)\nraise SystemExit(0)\nPY"
+      ],
+      "measurements": {
+        "script": "spi_clocked_response_verify",
+        "stages": [
+          {
+            "stage": "safety_gate",
+            "ok": true,
+            "duration_s": 0.0
+          },
+          {
+            "stage": "allowlist",
+            "ok": true,
+            "allowed": [
+              "diagnose_rtase",
+              "mcspi_ch0conf",
+              "mcspi_kernel_state",
+              "mcspi_loopback_selftest",
+              "p9_21_gpio_loopback_probe",
+              "spi_clocked_response_verify",
+              "spi_loopback_mode_compare"
+            ],
+            "effect": "reads_fixed_non_dac_clocked_spi_response_then_restores_spidev_settings",
+            "duration_s": 0.0
+          },
+          {
+            "stage": "script_hash",
+            "ok": true,
+            "path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\spi_clocked_response_verify.sh",
+            "sha256": "25589ab5151cfb722f288b763a9e1bd8e68bce6db62cca9b855e3489b5fa97b2",
+            "duration_s": 0.001
+          },
+          {
+            "stage": "connect",
+            "ok": true,
+            "duration_s": 2.068
+          },
+          {
+            "stage": "execute",
+            "ok": true,
+            "returncode": 0,
+            "stdout": "tx=000000000000 expected=a55a3cc3f00f matches=0/32 rx_distinct=000000000000\n",
+            "stderr": "",
+            "duration_s": 4.612
+          }
+        ],
+        "script_path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\spi_clocked_response_verify.sh",
+        "script_sha256": "25589ab5151cfb722f288b763a9e1bd8e68bce6db62cca9b855e3489b5fa97b2",
+        "script_bytes": 2186,
+        "target": {
+          "host": "192.168.50.2",
+          "user": "xilinx",
+          "port": 22
+        },
+        "returncode": 0,
+        "expected_returncode": 0,
+        "stdout": "tx=000000000000 expected=a55a3cc3f00f matches=0/32 rx_distinct=000000000000\n",
+        "stderr": "",
+        "stdout_bytes": 76,
+        "stderr_bytes": 0
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "bbb_run_script.transcript.json",
+          "kind": "ssh_transcript",
+          "sha256": "eea189396cebac2b90c9576a4fc1cdad1fa55d5483ed869c51baa8c4b6cb19e5",
+          "size_bytes": 2587
+        },
+        {
+          "path": "run_script.spi_clocked_response_verify.stdout.log",
+          "kind": "bbb_stdout",
+          "sha256": "550295dfb252be71be12ce2df9f17acc14fd39e0b26fa5cce08513a6a077eba9",
+          "size_bytes": 77
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {}
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "bbb_run_script.transcript.json",
+      "kind": "ssh_transcript",
+      "sha256": "eea189396cebac2b90c9576a4fc1cdad1fa55d5483ed869c51baa8c4b6cb19e5",
+      "size_bytes": 2587
+    },
+    {
+      "path": "run_script.spi_clocked_response_verify.stdout.log",
+      "kind": "bbb_stdout",
+      "sha256": "550295dfb252be71be12ce2df9f17acc14fd39e0b26fa5cce08513a6a077eba9",
+      "size_bytes": 77
+    }
+  ]
+}

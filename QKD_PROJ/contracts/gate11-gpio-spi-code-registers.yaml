@@ -1,0 +1,109 @@
+schema_version: 1
+test_id: gate11-gpio-spi-code-registers
+status: gpio_spi_code_register_protocol_verified
+
+purpose:
+  - Provide a GPIO-SPI-compatible writable/readable CODE0..CODE3 register bank.
+  - Keep all DAC, SMA, PRU, data-clock, and status nets unconfigured.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program, readback_or_program_status]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_gpio_code_regs
+  sources:
+    hdl: QKD_PROJ/spi_gpio_code_regs/spi_gpio_code_regs.v
+    constraints: QKD_PROJ/spi_gpio_code_regs/spi_gpio_code_regs.lpf
+  signal_path:
+    chip_select: {bbb_pin: P9_17, cpld_pin: 32, direction: input, active: low}
+    mosi: {bbb_pin: P9_18, cpld_pin: 31, direction: input}
+    return: {cpld_pin: 33, bbb_pin: P9_21, direction: output}
+    clock: {bbb_pin: P9_22, cpld_pin: 34, direction: input, mode: 0}
+  protocol: {frame_bits: 24, registers: 4, code_width: 14, read_opcode_msb: 1}
+  excluded_outputs: [D1B, D1CLK, D2B, D2CLK, SMA, PRU, status]
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 4
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+
+build_result:
+  status: passed
+  run: 20260820T064141Z_gate11_gpio_spi_code_regs_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  max_frequency_mhz: 84.452
+  source_sha256:
+    spi_gpio_code_regs.v: f0f31aeebf0db403b74453833a149356925d4ce0803940f0791b305d7436e622
+    spi_gpio_code_regs.lpf: b78242074cdf924a4b95460b7c4b636b8203432c6a3bdefb9a61b6e32a42761c
+  bitstream_sha256: c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029
+  bitstream_design_sha256: f77f08b170c2bed49a7574a830e5a65b386f1b20856862ae7ba2222fd2ec864d
+  bitstream_bytes: 17182
+  placed_io:
+    spi_mosi: {pin: 31, buffer: LVCMOS33_IN}
+    spi_cs_n: {pin: 32, buffer: LVCMOS33_IN}
+    spi_miso: {pin: 33, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+    spi_sclk: {pin: 34, buffer: LVCMOS33_IN}
+
+sram_program_candidate:
+  status: executed_passed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-20
+  approval_scope: >-
+    One volatile SRAM program of the GPIO-SPI CODE0..CODE3 diagnostic followed
+    only by GPIO0_3 write/readback verification at a 20 us-or-slower half period.
+  approval_max_executions: 1
+  approval_executions_used: 1
+  directory: QKD_PROJ/candidates/gate11-gpio-spi-code-regs
+  bitstream: spi_gpio_code_regs_impl1.bit
+  bitstream_sha256: c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029
+  bitstream_design_sha256: f77f08b170c2bed49a7574a830e5a65b386f1b20856862ae7ba2222fd2ec864d
+  bitstream_bytes: 17182
+  source_sha256:
+    spi_gpio_code_regs.v: f0f31aeebf0db403b74453833a149356925d4ce0803940f0791b305d7436e622
+    spi_gpio_code_regs.lpf: b78242074cdf924a4b95460b7c4b636b8203432c6a3bdefb9a61b6e32a42761c
+  companion_sha256:
+    spi_gpio_code_regs_impl1.pad: ee03b664b9bf3e79d4d5401db1c22ed804053198adf8b67c49980fe24e45dd8b
+    build.log: beedaef10f3fbb78f43f5510c3d18bf0b6fea2bf3b7b2be84615c8d1d54f3da0
+    manifest.json: 32e0405d3927c2ccb967638865c499f5409e0bd086573482223303d9dc872c67
+  immutable: true
+
+execution_result:
+  status: passed
+  run: 20260820T064639Z_gate11_gpio_spi_code_regs_sram
+  jtag_scan: {status: passed, device_count: 1, idcode: 0x012BC043}
+  sram_program:
+    status: passed
+    operation: SRAM Fast Program
+    programmed_bitstream_sha256: c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029
+    bitstream_header_design: spi_gpio_code_regs_impl1.ncd
+    crc16: 0x3C81
+
+gpio_protocol_result:
+  status: passed
+  transport: gpio
+  bbb_pins: {cs: P9_17, mosi: P9_18, miso: P9_21, sclk: P9_22}
+  half_period_us: 20
+  mode: 0
+  written_codes: [0x0001, 0x0123, 0x2345, 0x3FFE]
+  readback_codes: [0x0001, 0x0123, 0x2345, 0x3FFE]
+  bit_errors: 0
+  host_cli_sha256: b454736f8b649008aedb121b0eb85fbbed6ea83befdf7ef6ad22d06d31dcaf89
+  note: >-
+    The GPIO transport samples MISO immediately before the rising SCLK edge.
+    This host-only timing correction removed the earlier one-bit-left readback;
+    no additional CPLD program operation was performed.
+
+stop_conditions:
+  - Any output other than U2 pin 33 is placed.
+  - U2 pin 33 is not a 3.3 V LVCMOS output with 4 mA slow slew.
+  - Any DAC, SMA, PRU, data-clock, or status pin is configured as an output.

@@ -1,0 +1,14 @@
+PyYAML>=6.0
+pytest>=8.0
+# Live BBB access only (hwtools/ssh.py). Every offline test runs without it.
+paramiko>=3.0
+
+# Discovery loop document ingestion. PDF text is a search aid; the original
+# bytes and page identity remain the evidence.
+pypdf>=6.0
+
+# Standalone web UI only (webui/). The daemon, the ledger and every offline
+# test run without these.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx2>=0.1  # starlette's TestClient; test-time only

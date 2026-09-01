@@ -1,0 +1,214 @@
+{
+  "run": "gate3_spi_path_diag_build",
+  "started_at": "2026-08-19T00:59:54+00:00",
+  "updated_at": "2026-08-19T01:00:05+00:00",
+  "verdict": "FAIL",
+  "contract": {
+    "test_id": "gate3-spi-path-diagnostic",
+    "status": "diagnostic_build_pending",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate3-spi-path-diagnostic.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 9,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "started_at": "2026-08-19T00:59:54+00:00",
+      "duration_s": 10.216,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "spi_path_diag",
+        "top": "spi_path_diag",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "spi_path_diag.v": "de09086b3554d377f6685f46abdddd29d12e13cd246ae25b807e9b233a6e192c",
+          "spi_path_diag.lpf": "edfb14498ffc11f345cd011d51926dcd778c0d0b4fb91ca77b2c4632a4a7ba2d"
+        },
+        "active_lpf": "build/spi_path_diag.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "alive": {
+            "pin": 52,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB15A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "cs_seen": {
+            "pin": 83,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PR14B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "frame_done": {
+            "pin": 81,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PR15B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "sclk_seen": {
+            "pin": 82,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PR15A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "spi_cs_n": {
+            "pin": 32,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL19A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_miso": {
+            "pin": 33,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL19B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "spi_mosi": {
+            "pin": 31,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL18D",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_sclk": {
+            "pin": 34,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "write_done": {
+            "pin": 28,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL17B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          }
+        },
+        "user_io_count": 9,
+        "bitstream_sha256": "5d5d452d638c298ac18571a163e1925179b6b08e5bb3638d81e24fddf0e48e0f",
+        "bitstream_design_sha256": "ce035f6b5c77f1c3619a88bb57c1b9700834f25ad2455b2aab95791c3f348ab8",
+        "bitstream_bytes": 17319,
+        "expected_io": {
+          "ports": {
+            "spi_mosi": 31,
+            "spi_cs_n": 32,
+            "spi_miso": 33,
+            "spi_sclk": 34,
+            "alive": 80,
+            "cs_seen": 83,
+            "sclk_seen": 82,
+            "frame_done": 81,
+            "write_done": 28
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "spi_path_diag_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [
+          "FREQUENCY PORT \"spi_sclk\" 10.000000 MHz"
+        ],
+        "max_frequency_mhz": 72.286
+      },
+      "verdict": "FAIL",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "4352ea842db2cd172f2fd620aba950d21cdecc902c8c0aba819851896094c840",
+          "size_bytes": 29975
+        },
+        {
+          "path": "spi_path_diag_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "5d5d452d638c298ac18571a163e1925179b6b08e5bb3638d81e24fddf0e48e0f",
+          "size_bytes": 17319
+        },
+        {
+          "path": "spi_path_diag_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "9281b2a673e744a006dfd3cfa921769cef664188fa38c0b082328333451e208b",
+          "size_bytes": 36526
+        }
+      ],
+      "warnings": [
+        "Port 'alive' is on pin 52, contract requires 80."
+      ],
+      "error": "Port 'alive' is on pin 52, contract requires 80.",
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "4352ea842db2cd172f2fd620aba950d21cdecc902c8c0aba819851896094c840",
+      "size_bytes": 29975
+    },
+    {
+      "path": "spi_path_diag_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "5d5d452d638c298ac18571a163e1925179b6b08e5bb3638d81e24fddf0e48e0f",
+      "size_bytes": 17319
+    },
+    {
+      "path": "spi_path_diag_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "9281b2a673e744a006dfd3cfa921769cef664188fa38c0b082328333451e208b",
+      "size_bytes": 36526
+    }
+  ]
+}

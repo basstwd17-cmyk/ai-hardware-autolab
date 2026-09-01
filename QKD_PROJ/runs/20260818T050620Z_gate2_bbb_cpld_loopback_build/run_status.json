@@ -1,0 +1,14 @@
+{
+  "run": "gate2_bbb_cpld_loopback_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-18T05:06:29+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

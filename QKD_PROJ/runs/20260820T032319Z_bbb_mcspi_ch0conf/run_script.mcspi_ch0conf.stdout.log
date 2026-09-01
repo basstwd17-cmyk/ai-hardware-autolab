@@ -1,0 +1,106 @@
+== identity ==
+Fri Jul 24 16:50:48 UTC 2026
+6.18.39-bone44
+TI AM335x BeagleBone Black
+== runtime PM before ==
+power/control                = auto
+power/runtime_status         = suspended
+power/runtime_active_time    = 87889
+
+== forcing the module clock on (runtime PM only, reverted on exit) ==
+runtime_status = active
+
+== McSPI0 registers ==
+== phase A: bus idle ==
+-- registers with no transfer running
+   MCSPI_SYSCONFIG  = 0x00000015
+   MCSPI_SYSSTATUS  = 0x00000001
+   MCSPI_MODULCTRL  = 0x00000001
+   MCSPI_CH0CONF    = 0x200103fc
+   MCSPI_CH0STAT    = 0x00000006
+   MCSPI_CH0CTRL    = 0x00000200
+   MCSPI_XFERLEVEL  = 0x00000000
+   MODULCTRL:
+      SINGLE=1 (1 = single-channel master)
+      PIN34=0 (1 = 3-pin mode, CS not used)
+      MS=0 (0 = master)
+      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)
+   CH0CONF:
+      PHA=0 POL=0  -> SPI mode 0
+      CLKD=15 EPOL=1 (1 = CS active low)
+      WL=7  -> 8 bits per word
+      TRM=0 transmit+receive
+      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)
+      IS=0          -> receives from D0 (P9_21, the MISO pad)
+      TURBO=0 FORCE=0 SBE=0
+      FFEW=0 FFER=0 CLKG=1
+   CH0STAT:
+      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0
+   CH0CTRL EN=0
+   -> matches the standard master configuration for this board
+
+== phase B: during a transfer burst (00ffaa553cc3 @ 100 kHz) ==
+   transfers issued : 617
+   rx observed      : 000000000000, 000000000000, 000000000000, 000000000000
+   distinct CH0CONF values while running: 2
+
+-- CH0CONF=0x200103fc CH0CTRL.EN=0 seen 268x
+   MCSPI_SYSCONFIG  = 0x00000015
+   MCSPI_SYSSTATUS  = 0x00000001
+   MCSPI_MODULCTRL  = 0x00000001
+   MCSPI_CH0CONF    = 0x200103fc
+   MCSPI_CH0STAT    = 0x00000006
+   MCSPI_CH0CTRL    = 0x00000200
+   MCSPI_XFERLEVEL  = 0x00000000
+   MODULCTRL:
+      SINGLE=1 (1 = single-channel master)
+      PIN34=0 (1 = 3-pin mode, CS not used)
+      MS=0 (0 = master)
+      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)
+   CH0CONF:
+      PHA=0 POL=0  -> SPI mode 0
+      CLKD=15 EPOL=1 (1 = CS active low)
+      WL=7  -> 8 bits per word
+      TRM=0 transmit+receive
+      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)
+      IS=0          -> receives from D0 (P9_21, the MISO pad)
+      TURBO=0 FORCE=0 SBE=0
+      FFEW=0 FFER=0 CLKG=1
+   CH0STAT:
+      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0
+   CH0CTRL EN=0
+   -> matches the standard master configuration for this board
+
+-- CH0CONF=0x201103fc CH0CTRL.EN=1 seen 100x
+   MCSPI_SYSCONFIG  = 0x00000015
+   MCSPI_SYSSTATUS  = 0x00000001
+   MCSPI_MODULCTRL  = 0x00000001
+   MCSPI_CH0CONF    = 0x201103fc
+   MCSPI_CH0STAT    = 0x00000007
+   MCSPI_CH0CTRL    = 0x00001d01
+   MCSPI_XFERLEVEL  = 0x00000000
+   MODULCTRL:
+      SINGLE=1 (1 = single-channel master)
+      PIN34=0 (1 = 3-pin mode, CS not used)
+      MS=0 (0 = master)
+      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)
+   CH0CONF:
+      PHA=0 POL=0  -> SPI mode 0
+      CLKD=15 EPOL=1 (1 = CS active low)
+      WL=7  -> 8 bits per word
+      TRM=0 transmit+receive
+      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)
+      IS=0          -> receives from D0 (P9_21, the MISO pad)
+      TURBO=0 FORCE=1 SBE=0
+      FFEW=0 FFER=0 CLKG=1
+   CH0STAT:
+      RXS=1 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0
+   CH0CTRL EN=1
+   -> matches the standard master configuration for this board
+
+== pad configuration re-read (for correlation) ==
+pin 84 (PIN84) 2:gpio-96-127 44e10950 00000008 pinctrl-single 
+pin 85 (PIN85) 3:gpio-96-127 44e10954 00000028 pinctrl-single 
+pin 86 (PIN86) 4:gpio-96-127 44e10958 00000008 pinctrl-single 
+pin 87 (PIN87) 5:gpio-96-127 44e1095c 00000008 pinctrl-single 
+restored power/control = auto

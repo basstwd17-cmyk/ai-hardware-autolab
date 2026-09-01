@@ -1,0 +1,3 @@
+// Diagnostic-only output: U2 pin 33 returns to BBB P9_21, configured input.
+LOCATE COMP "spi_to_bbb_d0" SITE "33";
+IOBUF PORT "spi_to_bbb_d0" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;

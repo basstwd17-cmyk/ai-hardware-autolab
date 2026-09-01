@@ -1,0 +1,252 @@
+schema_version: 1
+test_id: gate12-pru-dac1-plan
+status: digital_control_path_verified_scope_limited
+
+allowed_operations: [diamond_build, readback_or_program_status]
+forbidden_operations:
+  - jtag_scan
+  - sram_fast_program
+  - nonvolatile_flash
+  - enable_analog_output
+  - drive_any_D2B_bus
+  - drive_D2CLK
+
+purpose:
+  - Record the approved-by-design sequence for the first channel-A PRU to CPLD to DAC1 test.
+  - Preserve Gate11 GPIO-SPI CODE0..CODE3 as the one-time configuration transport.
+  - Prevent a DAC, amplifier, or RF1 operation until an independent candidate and approval exist.
+
+dependencies:
+  gpio_spi_protocol_contract: contracts/gate11-gpio-spi-code-registers.yaml
+  board_map: contracts/board-map.yaml
+  schematic: RTASE_V1_Schematic1_2026-08-13.pdf
+  current_bbb_overlay: BB-RTASE-A-GPIO-SPI-00A0.dtbo
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+verified_inputs:
+  jtag: {device_count: 1, idcode: 0x012BC043}
+  gpio_spi:
+    transport: GPIO0
+    pins: {cs: P9_17, mosi: P9_18, miso: P9_21, sclk: P9_22}
+    readback: {CODE0: 0x0001, CODE1: 0x0123, CODE2: 0x2345, CODE3: 0x3FFE}
+    bit_errors: 0
+  mcspi_spidev:
+    status: receive_fault_isolated_not_a_gate12_dependency
+  cpld_configuration:
+    type: volatile_sram
+    warning: cleared_by_power_loss_or_bbb_reboot
+
+channel_a_path:
+  code_setup: {transport: GPIO-SPI, registers: [CODE0, CODE1, CODE2, CODE3], width_bits: 14}
+  selection:
+    - {pru: PRU0_R30_15, bbb_pin: P8_11, cpld_pin: 85, net: SYM.A0}
+    - {pru: PRU0_R30_14, bbb_pin: P8_12, cpld_pin: 84, net: SYM.A1}
+  update: {pru: PRU0_R30_0, bbb_pin: P9_31, cpld_pin: 35, net: LDASC.A}
+  dac:
+    reference: U6
+    part: AD9744ARUZRL7
+    data_bus: {net: D1B, cpld_pins_lsb_to_msb: [56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 68, 69, 70, 71]}
+    clock: {net: D1CLK, cpld_pin: 73, dac_pin: 28, edge: rising}
+  amplifier:
+    reference: U5
+    part: THS3491IRGTR
+    rails: {connector: CN1, positive: '+15V', negative: '-15V'}
+    gain_nominal_v_per_v: 10.1
+    output: {connector: RF1, series_resistance_ohm: 49.9, required_load_ohm: 50}
+
+bbb_preparation:
+  required_overlay: combined_gpio_spi_and_pru_channel_a
+  required_pru_pins: [P8_11, P8_12, P9_31]
+  hdmi_release_settings: [disable_uboot_overlay_audio=1, disable_uboot_overlay_video=1]
+  required_checks_after_reboot: [ssh, pru_ping, pru_version, GPIO-SPI_pinmux]
+  ordering_constraint: reboot_before_any_new_cpld_sram_program
+
+required_cpld_behavior:
+  code_selection: CODE0_to_CODE3_by_SYM_A1_A0
+  program_guard: reject_or_serialize_spi_code_writes_during_pru_run
+  pru_timing:
+    selection_setup_ns_minimum: 100
+    update_pulse_high_ns_nominal: 20
+    requirement_basis: AD9744_data_setup_2ns_hold_1_5ns_latch_pulse_width_1_5ns
+  allowed_outputs: [SPI.MISO, D1B, D1CLK]
+  prohibited_outputs: [D2B, D2CLK, RF2, status, unrelated_gpio]
+
+test_design:
+  top: gate12_pru_dac1
+  sources:
+    hdl: QKD_PROJ/gate12_pru_dac1/gate12_pru_dac1.v
+    constraints: QKD_PROJ/gate12_pru_dac1/gate12_pru_dac1.lpf
+  expected_user_io_count: 22
+  startup_codes: [0x0000, 0x0000, 0x0000, 0x0000]
+  outputs:
+    - {name: spi_miso, cpld_pin: 33, io_type: LVCMOS33, drive_ma: 4, slew: SLOW}
+    - {name: D1B, cpld_pins_lsb_to_msb: [56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 68, 69, 70, 71], io_type: LVCMOS33, drive_ma: 4, slew: SLOW}
+    - {name: d1clk, cpld_pin: 73, io_type: LVCMOS33, drive_ma: 8, slew: FAST}
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+  exact_user_io_count: 22
+  exact_dac_channel_outputs: [D1B, D1CLK]
+  prohibited_outputs_absent: [D2B, D2CLK]
+
+sram_program_candidate:
+  status: executed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-21
+  approval_scope: >-
+    One JTAG chain scan and one volatile SRAM Fast Program of the pinned Gate12
+    candidate, followed only by GPIO-SPI CODE0..3 write/readback and a short
+    PRU 0,1,2,3 digital sequence. No nonvolatile flash or analog power.
+  approval_max_executions: 1
+  approval_executions_used: 1
+  directory: QKD_PROJ/candidates/gate12-pru-dac1
+  bitstream: gate12_pru_dac1_impl1.bit
+  bitstream_sha256: dfedb3d06846b9c65020873ad26a7a634e5d49b4b6b1ad1e3880ee702f5ce2d4
+  bitstream_design_sha256: 90b8bd3a56f0a7e492b2101bf2783e423b563f576acead63f116120a0a1691cd
+  bitstream_bytes: 17662
+  source_sha256:
+    gate12_pru_dac1.v: 384410ea6531c1cc60abdae4baee04f0edaeadd64bf6b937b4353d3d7c62fbaa
+    gate12_pru_dac1.lpf: 94e2d08877dad503b0ce27400ca64c422c4b94fca65bdca2c74f5a5901da02f7
+  companion_sha256:
+    gate12_pru_dac1_impl1.pad: c9c9690ebb79bf783c703e69e6560229ac55a1f6b58a48f4a57c6f50d8c48d09
+    build.log: d5fa58d2ebacd712d7cbaa1d15178db18507501f067b7701519b68564f408f17
+    manifest.json: 8e228b9fe57e06558a96bbd9bea3f73c31aa3a5628e8e867470d968639f6229c
+    CANDIDATE.md: 8f72b66e740fba6df62c0605237bddae5b7e8fbe7be86b19c8427509b10bf267
+  immutable: true
+
+implementation_result:
+  status: passed_build_only
+  run: 20260821T005712Z_gate12_pru_dac1_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  drc_warnings: 0
+  timing_errors: 0
+  max_frequency_mhz: 67.326
+  user_io_count: 22
+  external_signal_selected_as_gsr: false
+  startup_codes: [0x0000, 0x0000, 0x0000, 0x0000]
+  placed_outputs:
+    spi_miso: {pin: 33, drive_ma: 4, slew: SLOW}
+    D1B: {pins_lsb_to_msb: [56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 68, 69, 70, 71], drive_ma: 4, slew: SLOW}
+    D1CLK: {pin: 73, drive_ma: 8, slew: FAST}
+  prohibited_outputs_present: []
+  rejected_builds:
+    - {run: 20260821T005555Z_gate12_pru_dac1_build, reason: spi_cs_n_promoted_to_GSR}
+    - {run: 20260821T005647Z_gate12_pru_dac1_build, reason: audit_false_positive_on_no_GSR_message}
+
+build_result:
+  bitstream_design_sha256: 90b8bd3a56f0a7e492b2101bf2783e423b563f576acead63f116120a0a1691cd
+
+digital_execution_result:
+  status: passed_scope_limited
+  run: 20260821T012554Z_gate12_pru_dac1_sram
+  jtag_scan:
+    status: passed
+    device_count: 1
+    idcode: 0x012BC043
+  sram_program:
+    status: passed
+    operation: SRAM Fast Program
+    programmed_bitstream_sha256: dfedb3d06846b9c65020873ad26a7a634e5d49b4b6b1ad1e3880ee702f5ce2d4
+    bitstream_design_sha256: 90b8bd3a56f0a7e492b2101bf2783e423b563f576acead63f116120a0a1691cd
+    bitstream_header_design: gate12_pru_dac1_impl1.ncd
+  gpio_spi_full_width_test:
+    written: [0x0001, 0x0123, 0x2345, 0x3FFE]
+    readback: [0x0001, 0x0123, 0x2345, 0x3FFE]
+    bit_errors: 0
+  gpio_spi_safe_run_codes:
+    written: [0x0000, 0x0001, 0x0002, 0x0003]
+    readback: [0x0000, 0x0001, 0x0002, 0x0003]
+    bit_errors: 0
+  pru_run:
+    symbols: [0, 1, 2, 3]
+    symbols_loaded: 4
+    shots_completed: 4
+    last_symbol: 3
+    selection_setup_ns: 100
+    update_pulse_ns: 20
+    gap_us: 1000
+    outputs_active_after_run: false
+  evidence:
+    file: runs/20260821T012554Z_gate12_pru_dac1_sram/digital_verification.json
+    sha256: 640c4fcab72b52c27dee348b49ecb61dbcdd4948e0a4598d7f5e1b121e529ae6
+  proven:
+    - BBB_GPIO_SPI_writes_and_reads_all_four_14bit_CODE_registers
+    - BBB_PRU_loads_and_completes_the_0_1_2_3_symbol_sequence
+    - reviewed_CPLD_logic_maps_SYM_A_to_the_selected_CODE_on_D1B
+    - PRU_outputs_return_inactive_after_the_finite_run
+  not_proven:
+    - electrical_D1B_or_D1CLK_trace_integrity
+    - DAC_conversion
+    - amplifier_or_SMA_output
+
+bbb_overlay_implementation:
+  status: activated_and_boot_verified
+  overlay: BB-RTASE-A-GPIO-SPI-PRU-00A0.dts
+  overlay_sha256: e47a1cd0aece561d5c7425c4fdc789b4cf01d7967c21cb0c096cf252636acbe4
+  preparer: BeagleBone-Black/host/prepare_gate12_overlay.py
+  preparer_sha256: 106e9d0c6dd246ec35ff315a6320abaf7132b1bef63998d4a102011ecda08ec1
+  default_action: prepare_only_no_uenv_change_no_reboot
+  staged_runtime_sha256:
+    rtase.py: 2976d32d31c502006a48cb521c0ce03ec9993112e7f10c072d67c10c47a8dc7c
+    rtase_spi.py: cf01358744b89d4b55a207afcf2b57f96b20b936cc77dd8cabcfa5ae84ac3dd7
+    rtase-pru-service.sh: fd15673e267e222fa75a41fc2035688f03ba2333936a48d9b21abfafd907e0da
+  run_spi_serialization:
+    lock_file: /run/lock/rtase-control.lock
+    behavior: GPIO-SPI_CODE_access_and_PRU_sequence_commands_are_mutually_exclusive
+  execution_result:
+    date: 2026-08-21
+    physical_state: top_PCB_separated
+    remote_dtbo_sha256: ee08632d1e824402691ad5e5c7b9325a44ab5fb64e667b165c081628ad77f235
+    uenv_backup: /boot/uEnv.txt.pre-gate12
+    active_uboot_overlay: BB-RTASE-A-GPIO-SPI-PRU-00A0.dtbo
+    hdmi_audio_disabled: true
+    hdmi_video_disabled: true
+    reboot_observed: {ssh_down: true, ssh_up: true}
+    chosen_overlay_identity: gate12-gpio-spi+pru0-channel-a
+    pinmux_verified:
+      P8_11: 0x0e
+      P8_12: 0x0e
+      P9_17: 0x07
+      P9_18: 0x07
+      P9_21: 0x27
+      P9_22: 0x07
+      P9_31: 0x0d
+    pru_service: active
+    rpmsg_device: /dev/rpmsg0
+    pru_version: bbb_pulse_io_v1.9-rtase
+    pru_ping_ok: true
+    pru_outputs_active: false
+    spidev0_0_present: false
+    shared_control_lock_present: true
+    verification_marker: GATE12_BOOT_VERIFY_OK
+    note: CPLD_SRAM_was_not_programmed_and_analog_power_was_not_enabled
+
+verification_sequence:
+  - name: digital_timing
+    prerequisites: [CN1_disconnected, Gate12_candidate_approved_for_SRAM_only]
+    observations: [SYM_A0, SYM_A1, P9_31, D1CLK, representative_D1B_bits]
+  - name: dac_code_response
+    prerequisites: [digital_timing_passed, CN1_disconnected]
+    observations: [small_code_delta, DAC1_OUT_baseline, current_and_temperature]
+  - name: rf1_analog_bringup
+    prerequisites: [explicit_analog_power_approval, CN1_rails_verified, RF1_50ohm_load_confirmed]
+    observations: [RF1_waveform, amplitude, settling, overshoot, supply_current]
+  - name: automated_run
+    prerequisites: [all_previous_gates_passed]
+    operations: [preflight, code_write_readback, pru_sequence_load, pru_run, scope_capture, immutable_run_record]
+
+hard_stops:
+  - The one approved Gate12 SRAM execution has been consumed; a reload requires new approval.
+  - No Gate12 SRAM program without a separate approved immutable candidate.
+  - No CN1 connection or RF1 measurement without explicit analog-power approval.
+  - Stop on current limit, rail droop, unexpected DAC1_OUT/RF1 level, or abnormal temperature.
+  - Do not use the existing fixed-code gate3 candidate as the writable-code Gate12 implementation.

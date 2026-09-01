@@ -1,0 +1,14 @@
+{
+  "run": "gate3_rf1_spi_rescan",
+  "verdict": "PASS",
+  "updated_at": "2026-08-18T08:17:41+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

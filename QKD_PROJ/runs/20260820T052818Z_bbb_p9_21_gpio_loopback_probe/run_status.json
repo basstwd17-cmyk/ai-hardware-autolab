@@ -1,0 +1,14 @@
+{
+  "run": "bbb_p9_21_gpio_loopback_probe",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-20T05:28:30+00:00",
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "'p9_21_gpio_loopback_probe' exited 1, contract expects 0."
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# BBB P8_11 -> RTASE_V1 net SYM.A0 -> CPLD pin 85 / PR13A.
+LOCATE COMP "bbb_p8_11" SITE "85";
+IOBUF PORT "bbb_p8_11" IO_TYPE=LVCMOS33;
+
+# Isolated observation output: CPLD pin 117 / PT24A -> temporary wire -> CH3.
+LOCATE COMP "dbg0" SITE "117";
+IOBUF PORT "dbg0" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;

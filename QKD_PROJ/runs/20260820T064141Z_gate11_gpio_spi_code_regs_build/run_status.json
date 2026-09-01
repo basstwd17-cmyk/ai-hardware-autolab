@@ -1,0 +1,14 @@
+{
+  "run": "gate11_gpio_spi_code_regs_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-20T06:41:47+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

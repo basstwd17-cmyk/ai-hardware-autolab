@@ -1,0 +1,147 @@
+{
+  "run": "gate2_bbb_cpld_loopback_build",
+  "started_at": "2026-08-18T05:06:20+00:00",
+  "updated_at": "2026-08-18T05:06:29+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate2-bbb-cpld-loopback",
+    "status": "build_candidate_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate2-bbb-cpld-loopback.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK_or_D2CLK",
+      "drive_any_D1B_or_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_ports": {
+      "bbb_p8_11": 85,
+      "dbg0": 117
+    },
+    "waveform_must_toggle": true,
+    "waveform_minimum_observed_edges": 4
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-18T05:06:20+00:00",
+      "duration_s": 8.808,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "bbb_cpld_loopback",
+        "top": "bbb_cpld_loopback",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "bbb_cpld_loopback.v": "5474c8ac566f5e46112b6e59f80fcf9ddaec44bbaa0dd652037d175fed305e35",
+          "bbb_cpld_loopback.lpf": "1d9d63076585a677077daf9c11ad50ef1836568a9c56fe4d7a37adc709e3f3d4"
+        },
+        "active_lpf": "build/bbb_cpld_loopback.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "bbb_p8_11": {
+            "pin": 85,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR13B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "dbg0": {
+            "pin": 117,
+            "bank": 0,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PT24A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          }
+        },
+        "user_io_count": 2,
+        "bitstream_sha256": "e468354719bd52ee5347399482d208c854141d0bf248dbb1d0d04843c0ae0768",
+        "bitstream_design_sha256": "6c27678de684cbdb5c881d428b5c5bb87d37f9bb9adc9ceb0c899aff417f038d",
+        "bitstream_bytes": 16029,
+        "expected_io": {
+          "ports": {
+            "bbb_p8_11": 85,
+            "dbg0": 117
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "bbb_cpld_loopback_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [],
+        "frequency_constraint": "not_applicable_combinational"
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "996e318309ac5b27513f2ac23fa33c1111da687adc9a86e436d78352ff039590",
+          "size_bytes": 23610
+        },
+        {
+          "path": "bbb_cpld_loopback_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "e468354719bd52ee5347399482d208c854141d0bf248dbb1d0d04843c0ae0768",
+          "size_bytes": 16029
+        },
+        {
+          "path": "bbb_cpld_loopback_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "987c05dfae91daa8763822e5e9608f785c66191403e17b5bcd8fa0d140b0ec64",
+          "size_bytes": 35435
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "996e318309ac5b27513f2ac23fa33c1111da687adc9a86e436d78352ff039590",
+      "size_bytes": 23610
+    },
+    {
+      "path": "bbb_cpld_loopback_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "e468354719bd52ee5347399482d208c854141d0bf248dbb1d0d04843c0ae0768",
+      "size_bytes": 16029
+    },
+    {
+      "path": "bbb_cpld_loopback_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "987c05dfae91daa8763822e5e9608f785c66191403e17b5bcd8fa0d140b0ec64",
+      "size_bytes": 35435
+    }
+  ]
+}

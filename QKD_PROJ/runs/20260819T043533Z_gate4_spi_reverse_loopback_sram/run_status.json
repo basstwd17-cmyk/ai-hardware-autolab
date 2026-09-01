@@ -1,0 +1,21 @@
+{
+  "run": "gate4_spi_reverse_loopback_sram",
+  "verdict": "PASS",
+  "updated_at": "2026-08-19T04:35:52+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    },
+    {
+      "tool": "cpld",
+      "action": "program_sram",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

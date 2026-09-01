@@ -1,0 +1,14 @@
+{
+  "run": "gate3_rf1_spi_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-18T08:14:46+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

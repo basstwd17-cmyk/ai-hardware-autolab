@@ -1,0 +1,104 @@
+# PROPOSED, NOT APPLIED -- contracts are signed by a person, not by a tool.
+#
+# Adds `effect_class` beside each script's existing `effect` sentence, so the
+# MCP server can decide whether a role may run it. The prose stays: "temporarily
+# muxes P9_17/18/21 as GPIO then restores exact state" says more than any enum,
+# and cannot be enforced. This is the machine-readable half beside it, not a
+# replacement.
+#
+# Until this is signed, every gate9 script counts as `mutate` and a server
+# launched `--role measurement` can run none of them. That is the intended
+# state: failing closed means a script nobody has classified is a script nobody
+# has thought about.
+#
+# The classification:
+#
+#   read    diagnose_rtase, mcspi_kernel_state
+#   mutate  mcspi_ch0conf, spi_loopback_mode_compare, spi_clocked_response_verify,
+#           p9_21_gpio_loopback_probe, mcspi_loopback_selftest
+#
+# Five of seven are `mutate` because **restoring a setting afterwards does not
+# make a script a read.** The restore is a second change rather than the absence
+# of a first one, and a process that dies between them leaves the board altered.
+# Three of those five say exactly that in their own `effect` line.
+#
+# Reviewer: the call worth checking is `mcspi_ch0conf`. Its description says it
+# reads controller registers; its effect line adds "runs existing loopback
+# traffic", which drives the bus, and that is why it is `mutate` rather than
+# `read`. If that traffic is genuinely inert, reclassifying it would give
+# measurement a third readable diagnostic.
+#
+# Unrelated and still open: this contract has a `pinned_file_drift` finding on
+# spi_clocked_response_verify (disk 735c91d3..., contract 25589ab5...). This
+# patch does not touch that hash. Settle it separately, after reading the diff.
+#
+# The file has mixed line endings on disk -- 157 CRLF lines and 44 LF -- so a
+# plain `git apply` refuses it. That is a property of the contract, not of this
+# patch, and normalising the whole file would be an unrequested change to a
+# signed document. Use --ignore-whitespace, or fix the endings deliberately in
+# a commit of their own first.
+#
+# To apply, after review:
+#   git apply --ignore-whitespace QKD_PROJ/contracts/proposals/2026-08-21-gate9-effect-class.patch
+# To see it first:
+#   git apply --check --ignore-whitespace --stat <the same path>
+#
+diff --git a/QKD_PROJ/contracts/gate9-bbb-host-tooling.yaml b/QKD_PROJ/contracts/gate9-bbb-host-tooling.yaml
+--- a/QKD_PROJ/contracts/gate9-bbb-host-tooling.yaml
++++ b/QKD_PROJ/contracts/gate9-bbb-host-tooling.yaml
+@@ -94,6 +94,7 @@ scripts:
+     path: BeagleBone-Black/scripts/diagnose_rtase.sh
+     sha256: 52f8d89e7662be1c58cd4ce97517bc5a0b507e06e5cd026cee17648e3bf27ac9
+     effect: read_only
++    effect_class: read
+     expected_returncode: 0
+     description: >-
+       Dumps identity, boot overlay, remoteproc state, device nodes, loaded
+@@ -103,6 +104,7 @@ scripts:
+     path: BeagleBone-Black/diagnostics/mcspi_kernel_state.sh
+     sha256: 2348081f4ce660454dba72ce573d248db1117d6467568c87e3100841952a77f8
+     effect: read_only
++    effect_class: read
+     expected_returncode: 0
+     description: >-
+       McSPI0 state as the kernel already holds it: applied spi0 device-tree
+@@ -116,6 +118,7 @@ scripts:
+     path: BeagleBone-Black/diagnostics/mcspi_ch0conf.sh
+     sha256: d29925e22784e8ade8f1e9bab85d485014dc0a9f7fdb1d0d0c354e79207d41c7
+     effect: reads_controller_registers_runs_existing_loopback_traffic
++    effect_class: mutate
+     expected_returncode: 0
+     description: >-
+       Decodes McSPI0 MODULCTRL/CH0CONF/CH0STAT/CH0CTRL. No controller register
+@@ -130,6 +133,7 @@ scripts:
+     path: BeagleBone-Black/diagnostics/spi_loopback_mode_compare.sh
+     sha256: 516c8089473bf24c9fa9050d399ffb5d2bdfec301e1e84e66a9f06ac8f533086
+     effect: runs_non_dac_loopback_frame_in_modes_0_and_1_then_restores_spidev_settings
++    effect_class: mutate
+     expected_returncode: 0
+     description: >-
+       Sends only 00ffaa553cc3 through the currently loaded non-DAC CPLD
+@@ -148,6 +152,7 @@ scripts:
+     # run_bbb refused the script at QKD_PROJ/hwtools/bbb.py:249.
+     sha256: 735c91d33748dce731fde0a909a19178b00f7a756782fe311120bb2d128aac72
+     effect: reads_fixed_non_dac_clocked_spi_response_then_restores_spidev_settings
++    effect_class: mutate
+     expected_returncode: 0
+     description: >-
+       Sends 000000000000 at SPI mode 0 and 100 kHz, then records 32 responses
+@@ -160,6 +165,7 @@ scripts:
+     path: BeagleBone-Black/diagnostics/p9_21_gpio_loopback_probe.sh
+     sha256: bc695161fea36f3512c22af6e95b082307a389b1c135561124763fa3a629768a
+     effect: temporarily_muxes_P9_17_P9_18_P9_21_as_GPIO_then_restores_exact_state
++    effect_class: mutate
+     expected_returncode: 0
+     description: >-
+       Temporarily makes P9_17 (GPIO0_5) and P9_18 (GPIO0_4) outputs and
+@@ -177,6 +183,7 @@ scripts:
+     path: BeagleBone-Black/diagnostics/mcspi_loopback_selftest.sh
+     sha256: 9a346387c74a33f9d55d5e904f5f366374f2a8f527fc3f8cb86db8305ef104f8
+     effect: sets_spidev_mode_runs_existing_loopback_traffic
++    effect_class: mutate
+     expected_returncode: 0
+     description: >-
+       Runs the same 6-byte transfer three ways in one session: external path,

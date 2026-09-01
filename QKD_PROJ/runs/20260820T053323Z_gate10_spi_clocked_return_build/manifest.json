@@ -1,0 +1,160 @@
+{
+  "run": "gate10_spi_clocked_return_build",
+  "started_at": "2026-08-20T05:33:23+00:00",
+  "updated_at": "2026-08-20T05:33:33+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate10-spi-clocked-return",
+    "status": "build_pending",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate10-spi-clocked-return.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 3,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483,
+    "expected_response_hex": "a55a3cc3f00f"
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-20T05:33:23+00:00",
+      "duration_s": 9.488,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "spi_clocked_return",
+        "top": "spi_clocked_return",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "spi_clocked_return.v": "40b2773a795c94bbbbd734da1a1ef2afa4e9119da5e1edbc338f754d404fef02",
+          "spi_clocked_return.lpf": "c3aa71ceb848c0c35cef5278ed2b552936d1b41aa68e502290a6107124725afd"
+        },
+        "active_lpf": "build/spi_clocked_return.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "spi_cs_n": {
+            "pin": 32,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL19A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_miso": {
+            "pin": 33,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL19B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "spi_sclk": {
+            "pin": 34,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20A",
+            "drive_ma": null,
+            "slew": null
+          }
+        },
+        "user_io_count": 3,
+        "bitstream_sha256": "0132cc39b173ea1e19e31c814631ad2f476c5e0a185c0597b758f36e0211ef13",
+        "bitstream_design_sha256": "ac7bac85d2716aeb3098d8c070a7b498f58b8fb4430377ea5bbc207e8305fcf7",
+        "bitstream_bytes": 16383,
+        "expected_io": {
+          "ports": {
+            "spi_cs_n": 32,
+            "spi_miso": 33,
+            "spi_sclk": 34
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "spi_clocked_return_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [
+          "FREQUENCY PORT \"spi_sclk\" 10.000000 MHz"
+        ],
+        "max_frequency_mhz": 150.15
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "81df27696e75a1ec5f1a660ded2b65dcd84a978259aa46e104447508e4dff4c8",
+          "size_bytes": 27329
+        },
+        {
+          "path": "spi_clocked_return_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "0132cc39b173ea1e19e31c814631ad2f476c5e0a185c0597b758f36e0211ef13",
+          "size_bytes": 16383
+        },
+        {
+          "path": "spi_clocked_return_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "651b5f3647750d14b1cf6b97a4e48d9299d31e59c0d5d1127b04b80a9c232a46",
+          "size_bytes": 35570
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "81df27696e75a1ec5f1a660ded2b65dcd84a978259aa46e104447508e4dff4c8",
+      "size_bytes": 27329
+    },
+    {
+      "path": "spi_clocked_return_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "0132cc39b173ea1e19e31c814631ad2f476c5e0a185c0597b758f36e0211ef13",
+      "size_bytes": 16383
+    },
+    {
+      "path": "spi_clocked_return_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "651b5f3647750d14b1cf6b97a4e48d9299d31e59c0d5d1127b04b80a9c232a46",
+      "size_bytes": 35570
+    }
+  ]
+}

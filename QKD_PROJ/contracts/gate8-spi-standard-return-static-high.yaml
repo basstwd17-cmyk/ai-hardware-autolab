@@ -1,0 +1,81 @@
+schema_version: 1
+test_id: gate8-spi-standard-return-static-high
+status: candidate_approved
+
+purpose:
+  - Isolate U2 pin 33 to BBB P9_21 standard return wiring without SPI, DAC, SMA, or PRU activity.
+  - Drive only U2 pin 33 high at LVCMOS33, 4 mA, slow slew.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_standard_return_static_high
+  sources:
+    hdl: QKD_PROJ/spi_standard_return_static_high/spi_standard_return_static_high.v
+    constraints: QKD_PROJ/spi_standard_return_static_high/spi_standard_return_static_high.lpf
+  driven_path:
+    source: {cpld_pin: 33, bbb_pin: P9_21, value: high}
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 1
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+
+build_result:
+  status: passed
+  run: 20260819T054440Z_gate8_spi_standard_return_static_high_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  source_sha256:
+    spi_standard_return_static_high.v: c0d4be470a35d40931579c8426b81b74433c259f771333110c7bec35180b9ccc
+    spi_standard_return_static_high.lpf: a95425ea3446795c56d84f820023dc3a382a00bb820d3bab87d43816d5686bcc
+  bitstream_sha256: ee6f97529f480e48e6fbb1958ddcf7823b4878fe9bb022def0e90b971df91050
+  bitstream_design_sha256: 1ebc8bfa05cf6ec887e96fb0bdfd1b0671df099531b5aa1b1f601659e12042db
+  bitstream_bytes: 16043
+  placed_io:
+    spi_to_bbb_d0: {pin: 33, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+
+sram_program_candidate:
+  status: executed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-20
+  approval_scope: one volatile SRAM program to hold U2 pin 33 high followed by native-C and Python BBB receive tests
+  reapproval_reason: volatile SRAM configuration was cleared during BBB recovery;
+    user approved one new static-high-only receive-path verification.
+  directory: QKD_PROJ/candidates/gate8-spi-standard-return-static-high
+  bitstream: spi_standard_return_static_high_impl1.bit
+  bitstream_sha256: ee6f97529f480e48e6fbb1958ddcf7823b4878fe9bb022def0e90b971df91050
+  bitstream_design_sha256: 1ebc8bfa05cf6ec887e96fb0bdfd1b0671df099531b5aa1b1f601659e12042db
+  bitstream_bytes: 16043
+  source_sha256:
+    spi_standard_return_static_high.v: c0d4be470a35d40931579c8426b81b74433c259f771333110c7bec35180b9ccc
+    spi_standard_return_static_high.lpf: a95425ea3446795c56d84f820023dc3a382a00bb820d3bab87d43816d5686bcc
+  companion_sha256:
+    spi_standard_return_static_high_impl1.pad: 1b36365e9a99a393aa16a96a14ef61d7bea7a567f92be7b57ff9d08b8a3e6eee
+    build.log: df8a7ceb978d766fbd4457f3887155a4fe58c8a9af24ca70d015f3ed8ffb03f1
+    manifest.json: 13aeb1a95450fa18948f73a054315b2cf6670fb3f5e85378940ed3df8d15517b
+  immutable: true
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260820T024017Z_gate8_spi_standard_return_static_high_sram
+  execution_result: PASS_native_c_and_python_static_high_readback
+  native_c_rx: ffffffffffff
+  python_readback: {CODE0: 0x3fff, CODE1: 0x3fff, CODE2: 0x3fff, CODE3: 0x3fff}
+  previous_execution_run: 20260819T055446Z_gate8_spi_standard_return_static_high_sram
+  previous_execution_result: PASS_native_and_python_rx_zero
+  previous_native_c_rx: 000000000000
+  previous_python_rx: 000000000000
+
+stop_conditions:
+  - Any pin other than U2 pin 33 is configured as a user output.
+  - U2 pin 33 is not a 3.3 V LVCMOS output with 4 mA slow slew.

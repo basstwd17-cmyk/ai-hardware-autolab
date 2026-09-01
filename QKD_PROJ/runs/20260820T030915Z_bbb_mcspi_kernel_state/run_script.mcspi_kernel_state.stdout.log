@@ -1,0 +1,61 @@
+== identity ==
+Fri Jul 24 16:36:45 UTC 2026
+TI AM335x BeagleBone Black
+6.18.39-bone44
+
+== live overlays ==
+BB-ADC-00A0.kernel: Tue Jul 21 00:16:46 2026
+BB-BONE-eMMC1-01-00A0.kernel: Tue Jul 21 00:16:46 2026
+BB-RTASE-A-00A0.kernel: v3-pru0+spi0+diagnostic-gpio-inputs
+name: overlays
+
+== spi0 device-tree node (as applied) ==
+
+== spi bus as the kernel enumerated it ==
+total 0
+drwxr-xr-x  2 root root 0 Jul 25 01:36 .
+drwxr-xr-x 56 root root 0 Jan  1  2000 ..
+lrwxrwxrwx  1 root root 0 Jan  1  2000 spi0 -> ../../devices/platform/ocp/48000000.interconnect/48000000.interconnect:segment@0/48030000.target-module/48030000.spi/spi_master/spi0
+-- /sys/bus/spi/devices/spi0.0
+   modalias                 spi:dh2228fv 
+   driver_override           
+   of_node/compatible       rohm,dh2228fv
+   of_node/spi-max-frequency  B@
+crw-rw-rw- 1 root root 153, 0 Jul 25 01:00 /dev/spidev0.0
+
+== spidev configuration (ioctl read-back, no transfer) ==
+/dev/spidev0.0
+   mode         = 0x00  (SPI mode 0)
+   mode32       = 0x00000000  [-]
+   CPOL=0 CPHA=0
+   bits/word    = 8
+   lsb_first    = 0
+   max_speed_hz = 1000000
+
+== pad configuration for SPI0 (pinctrl-single) ==
+   pin 84 = P9_22 SCLK, 85 = P9_21 D0, 86 = P9_18 D1, 87 = P9_17 CS0
+   conf bits: 6 SLEWCTRL | 5 RXACTIVE | 4 PULLTYPESEL(1=up) | 3 PULLUDEN(1=disabled) | 2:0 mux
+-- /sys/kernel/debug/pinctrl/44e10800.pinmux-pinctrl-single
+pin 84 (PIN84) 2:gpio-96-127 44e10950 00000008 pinctrl-single 
+pin 85 (PIN85) 3:gpio-96-127 44e10954 00000028 pinctrl-single 
+pin 86 (PIN86) 4:gpio-96-127 44e10958 00000008 pinctrl-single 
+pin 87 (PIN87) 5:gpio-96-127 44e1095c 00000008 pinctrl-single 
+pin 84 (PIN84): 48030000.spi (GPIO UNCLAIMED) function rtase_spi0_pins group rtase_spi0_pins
+pin 85 (PIN85): 48030000.spi (GPIO UNCLAIMED) function rtase_spi0_pins group rtase_spi0_pins
+pin 86 (PIN86): 48030000.spi (GPIO UNCLAIMED) function rtase_spi0_pins group rtase_spi0_pins
+pin 87 (PIN87): 48030000.spi (GPIO UNCLAIMED) function rtase_spi0_pins group rtase_spi0_pins
+
+== driver binding and clocks ==
+total 0
+drwxr-xr-x   2 root root    0 Jul 25 01:36 .
+drwxr-xr-x 123 root root    0 Jan  1  2000 ..
+lrwxrwxrwx   1 root root    0 Jul 25 01:36 48030000.spi -> ../../../../devices/platform/ocp/48000000.interconnect/48000000.interconnect:segment@0/48030000.target-module/48030000.spi
+--w-------   1 root root 4096 Jul 25 01:36 bind
+--w-------   1 root root 4096 Jan  1  2000 uevent
+--w-------   1 root root 4096 Jul 25 01:36 unbind
+/sys/bus/platform/devices/48030000.spi/power/runtime_status = suspended
+/sys/bus/platform/devices/48030000.spi/power/control = auto
+
+== kernel log, spi only ==
+[ 2014.065135] spidev spi0.0: setup: unsupported mode bits 20
+[ 2023.902053] spidev spi0.0: setup: unsupported mode bits 20

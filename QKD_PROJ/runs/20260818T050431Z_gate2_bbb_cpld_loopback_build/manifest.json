@@ -1,0 +1,148 @@
+{
+  "run": "gate2_bbb_cpld_loopback_build",
+  "started_at": "2026-08-18T05:04:31+00:00",
+  "updated_at": "2026-08-18T05:04:44+00:00",
+  "verdict": "FAIL",
+  "contract": {
+    "test_id": "gate2-bbb-cpld-loopback",
+    "status": "build_candidate_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate2-bbb-cpld-loopback.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK_or_D2CLK",
+      "drive_any_D1B_or_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_ports": {
+      "bbb_p8_11": 85,
+      "dbg0": 117
+    },
+    "waveform_must_toggle": true,
+    "waveform_minimum_observed_edges": 4
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "started_at": "2026-08-18T05:04:31+00:00",
+      "duration_s": 12.253,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "bbb_cpld_loopback",
+        "top": "bbb_cpld_loopback",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "bbb_cpld_loopback.v": "2acbf17aa967be881b6bec1fabe9a366b7d2c4153792911cdd5f75016cae33f3",
+          "bbb_cpld_loopback.lpf": "1d9d63076585a677077daf9c11ad50ef1836568a9c56fe4d7a37adc709e3f3d4"
+        },
+        "active_lpf": "build/bbb_cpld_loopback.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "bbb_p8_11": {
+            "pin": 85,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR13B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "dbg0": {
+            "pin": 117,
+            "bank": 0,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PT24A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          }
+        },
+        "user_io_count": 2,
+        "bitstream_sha256": "355f4096e018d6c4b7feb9048be31d9cbb7cc5e12700d2bb3db43ae3a170776f",
+        "bitstream_design_sha256": "6c27678de684cbdb5c881d428b5c5bb87d37f9bb9adc9ceb0c899aff417f038d",
+        "bitstream_bytes": 16029,
+        "expected_io": {
+          "ports": {
+            "bbb_p8_11": 85,
+            "dbg0": 117
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "bbb_cpld_loopback_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": []
+      },
+      "verdict": "FAIL",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "dce3bdc546e3e3a212897a23da31b6e109ecd2cdac50bd01933323fe970652e2",
+          "size_bytes": 23610
+        },
+        {
+          "path": "bbb_cpld_loopback_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "355f4096e018d6c4b7feb9048be31d9cbb7cc5e12700d2bb3db43ae3a170776f",
+          "size_bytes": 16029
+        },
+        {
+          "path": "bbb_cpld_loopback_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "a7c4bd6d4f6cedb08a94fa6819264bd2cf97db29e2bb206e4effba5882028bd3",
+          "size_bytes": 35435
+        }
+      ],
+      "warnings": [
+        "No FREQUENCY preference was scored. The design was placed without a clock constraint, so the timing result means nothing."
+      ],
+      "error": "No FREQUENCY preference was scored. The design was placed without a clock constraint, so the timing result means nothing.",
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "dce3bdc546e3e3a212897a23da31b6e109ecd2cdac50bd01933323fe970652e2",
+      "size_bytes": 23610
+    },
+    {
+      "path": "bbb_cpld_loopback_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "355f4096e018d6c4b7feb9048be31d9cbb7cc5e12700d2bb3db43ae3a170776f",
+      "size_bytes": 16029
+    },
+    {
+      "path": "bbb_cpld_loopback_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "a7c4bd6d4f6cedb08a94fa6819264bd2cf97db29e2bb206e4effba5882028bd3",
+      "size_bytes": 35435
+    }
+  ]
+}

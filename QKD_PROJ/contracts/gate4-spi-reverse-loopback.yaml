@@ -1,0 +1,96 @@
+schema_version: 1
+test_id: gate4-spi-reverse-loopback
+status: candidate_approved
+
+purpose:
+  - Test the alternate BBB SPI0 D0-output/D1-input direction without DAC output.
+  - Echo U2 pin 33 to U2 pin 31 only while SPI.CS is low.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program, readback_or_program_status]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_reverse_loopback
+  sources:
+    hdl: QKD_PROJ/spi_reverse_loopback/spi_reverse_loopback.v
+    constraints: QKD_PROJ/spi_reverse_loopback/spi_reverse_loopback.lpf
+  signal_path:
+    source: {bbb_pin: P9_21, cpld_pin: 33, direction: input}
+    return: {cpld_pin: 31, bbb_pin: P9_18, direction: output}
+    chip_select: {bbb_pin: P9_17, cpld_pin: 32, direction: input, active: low}
+  prerequisite_overlay: BB-RTASE-A-SPI-REVERSE-00A0.dtbo
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 3
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+  echo_must_equal_transmit: true
+
+build_result:
+  status: passed
+  run: 20260819T022342Z_gate4_spi_reverse_loopback_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  source_sha256:
+    spi_reverse_loopback.v: b2c81f317fa52e9b99a33b345b24be836b668544c156b52fa31a364dc4c06dd9
+    spi_reverse_loopback.lpf: 2e70ccffa56194e723cbdd0e1183da9f71d4680c84da79a624d5c081b8bd840f
+  bitstream_sha256: 7d0e890d87edf39cff2ccf77ea99c1364607b3a5c5acbd5098ab2b55ce5ab3f3
+  bitstream_design_sha256: e89134172a3cb7ab5d88c265acb8407a169558f3f67fe07fa3c6c152929e7341
+  bitstream_bytes: 16046
+  placed_io:
+    spi_to_bbb_d1: {pin: 31, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+    spi_cs_n: {pin: 32, buffer: LVCMOS33_IN}
+    spi_from_bbb_d0: {pin: 33, buffer: LVCMOS33_IN}
+
+sram_program_candidate:
+  status: executed_awaiting_echo
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-19
+  approval_scope: one volatile SRAM retest after the reversed BBB SPI PADCONF direction is verified active
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260819T043533Z_gate4_spi_reverse_loopback_sram
+  execution_result: PASS_echo_failed
+  echo_result:
+    speed_hz_tested: [100000, 10000]
+    tx: 00ffaa553cc3
+    rx: 000000000000
+    conclusion: reverse_direction_loopback_failed_after_verified_padconf
+  directory: QKD_PROJ/candidates/gate4-spi-reverse-loopback
+  bitstream: spi_reverse_loopback_impl1.bit
+  bitstream_sha256: 7d0e890d87edf39cff2ccf77ea99c1364607b3a5c5acbd5098ab2b55ce5ab3f3
+  bitstream_design_sha256: e89134172a3cb7ab5d88c265acb8407a169558f3f67fe07fa3c6c152929e7341
+  bitstream_bytes: 16046
+  source_sha256:
+    spi_reverse_loopback.v: b2c81f317fa52e9b99a33b345b24be836b668544c156b52fa31a364dc4c06dd9
+    spi_reverse_loopback.lpf: 2e70ccffa56194e723cbdd0e1183da9f71d4680c84da79a624d5c081b8bd840f
+  companion_sha256:
+    spi_reverse_loopback_impl1.pad: b0845c32c28e98641ed6f030504c3d9ec975cff1dd39ada337ef4a0e7e9da658
+    build.log: 10dd95482029221afdb568f8379725cb596f771758923e319cafb9c5a356577c
+    manifest.json: e0ec6df88007249d773e3a0e441ec1fae0bdcf25bafc5c2a3f31b39adf5f280e
+  immutable: true
+
+previous_sram_program:
+  execution_run: 20260819T041334Z_gate4_spi_reverse_loopback_sram
+  execution_result: PASS_echo_failed_not_conclusive
+  overlay_defect: P9_18 remained PADCONF-output and P9_21 remained PADCONF-input
+  echo_result:
+    speed_hz_tested: [100000, 10000]
+    tx: 00ffaa553cc3
+    rx: 000000000000
+    conclusion: invalid_for_direction_diagnosis
+
+stop_conditions:
+  - The reversed BBB overlay is not active before U2 pin 31 becomes an output.
+  - Any DAC data, D1CLK, D2CLK, PRU, or analog-output pin is configured as an output.
+  - U2 pin 31 is configured as an input.
+  - U2 pin 33 is configured as an output.

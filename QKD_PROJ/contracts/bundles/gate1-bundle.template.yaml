@@ -1,0 +1,75 @@
+# Gate 1 approval bundle -- TEMPLATE, NOT SIGNED.
+#
+# This file will not load. `approved_by` is blank and the dates are
+# placeholders, so `load_bundle()` refuses it -- which is the point: a template
+# must never be usable as an approval.
+#
+# To issue a real bundle:
+#   1. Copy this to gate1-<date>-<letter>.yaml in this directory.
+#   2. Fill approved_by, issued_on, expires_on.
+#   3. Delete any step that is not being authorised. Steps must stay in the
+#      order scan -> program -> measure, and you may only keep a prefix:
+#      scan alone is fine, scan+program is fine, program alone is not.
+#   4. Re-check every SHA-256 below against the files on disk. The digests are
+#      what the signature is actually granted against; the paths only say where
+#      to look.
+#
+# Editing a bundle after it is signed changes its digest, which resets its
+# ledger budget. That is deliberate -- an edited approval is a new approval.
+
+schema_version: 1
+
+bundle_id: gate1-TEMPLATE
+test_spec: gate1-test-spec.yaml
+
+# Who signed, and for how long. An approval with no expiry becomes a standing
+# permission nobody remembers granting.
+approved_by: ""
+issued_on: "YYYY-MM-DD"
+expires_on: "YYYY-MM-DD"
+
+steps:
+  # ---- Approval 1 -------------------------------------------------------
+  - step: scan
+    operation: jtag_scan
+    max_executions: 3
+    artifacts:
+      # QKD_PROJ/contracts/gate1-scan-only.xcf as of 2026-08-18.
+      scan_xcf_sha256: 70d60e7e66f1a4e93c43a570e8ca757eebf2c6c8aa607b4c2dcc406e8f57da70
+    params:
+      files:
+        scan_xcf: QKD_PROJ/contracts/gate1-scan-only.xcf
+
+  # ---- Approval 2 -------------------------------------------------------
+  # Do not include this step until APPROVAL-2.md is signed. The layer 3 tool
+  # refuses anyway (it requires sram_program_candidate.approved: true), but a
+  # bundle should not claim an authority that does not exist.
+  - step: program
+    operation: sram_fast_program
+    max_executions: 1
+    artifacts:
+      # QKD_PROJ/contracts/gate1-sram-program.xcf as of 2026-08-18.
+      program_xcf_sha256: c06367f76958ad0977867858cadf25ac0e75b13c32c0a0bd8ae46129db5dd149
+      # Must equal sram_program_candidate.bitstream_sha256 in the test spec.
+      # check_against_contract() refuses the bundle if the two disagree.
+      bitstream_sha256: c656c41ab34df655fb1d638d4af25439ff45fd3f70a73692fad3519085463910
+    params:
+      files:
+        program_xcf: QKD_PROJ/contracts/gate1-sram-program.xcf
+
+  # ---- Approval 3 -------------------------------------------------------
+  # measure_gate1_gpio() is still being written. While it is missing the step
+  # is BLOCKED rather than run, and nothing is touched.
+  #
+  # Gate 1 does not judge frequency: OSCH accuracy is unestablished, so
+  # test_design.behavior.frequency_tolerance_percent is null. The measurement
+  # asks whether a safe pin toggles repeatably.
+  - step: measure
+    operation: oscilloscope_capture
+    max_executions: 3
+    artifacts: {}
+    params:
+      # CH3/CH4 only. CH1/CH2 coupling DC means 50 ohm on this instrument,
+      # which would pull an LVCMOS33 4 mA output below the 2.4 V threshold and
+      # make a working design look broken.
+      channel: CH3

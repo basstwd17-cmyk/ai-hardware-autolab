@@ -1,0 +1,111 @@
+{
+  "run": "gate3_rf1_spi_rescan",
+  "started_at": "2026-08-18T08:17:29+00:00",
+  "updated_at": "2026-08-18T08:17:41+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate3-rf1-spi-demo",
+    "status": "fixed_candidate_pinned_not_approved",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate3-rf1-spi-demo.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan"
+    ],
+    "forbidden_operations": [
+      "drive_D2CLK",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 22,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483,
+    "register_write_readback_bit_errors": 0
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": true,
+      "started_at": "2026-08-18T08:17:29+00:00",
+      "duration_s": 12.156,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pgrcmd.exe -infile C:\\KIST\\QKD_PROJ\\contracts\\gate1-scan-only.xcf -logfile C:\\KIST\\QKD_PROJ\\runs\\20260818T081729Z_gate3_rf1_spi_rescan\\jtag_scan.pgrcmd.log -processtype sequential -cabletype usb2 -portaddress FTUSB-0 -TCK 10"
+      ],
+      "measurements": {
+        "expected_device_count": 1,
+        "expected_idcode": "0x012BC043",
+        "device": "LCMXO2-4000HC",
+        "cable_type": "USB2",
+        "port": "FTUSB-0",
+        "tck_divider": 10,
+        "returncode": 0,
+        "chain_verified": true,
+        "device_count": 1,
+        "device_count_source": "pgrcmd_log",
+        "idcodes": [
+          "0x012BC043"
+        ],
+        "idcode": "0x012BC043",
+        "idcode_source": "verified_xcf_chain",
+        "observed_devices": [
+          "LCMXO2-4000HC"
+        ]
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "gate1-scan-only.xcf",
+          "kind": "jtag_scan_xcf",
+          "sha256": "70d60e7e66f1a4e93c43a570e8ca757eebf2c6c8aa607b4c2dcc406e8f57da70",
+          "size_bytes": 1343
+        },
+        {
+          "path": "jtag_scan.pgrcmd.log",
+          "kind": "pgrcmd_log",
+          "sha256": "d6ff230e3529d9b4dc0715df8018057fa1bb550a1d4a4288a73859e0d15343d8",
+          "size_bytes": 672
+        },
+        {
+          "path": "jtag_scan.transcript.log",
+          "kind": "command_transcript",
+          "sha256": "22ba88dbf7b67b27e4428413998fac0c6ac8139b9db771b55b293be1ae9a0f19",
+          "size_bytes": 1685
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "xcf": "3.14",
+        "diamond_root": "C:\\lscc\\diamond\\3.14"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "gate1-scan-only.xcf",
+      "kind": "jtag_scan_xcf",
+      "sha256": "70d60e7e66f1a4e93c43a570e8ca757eebf2c6c8aa607b4c2dcc406e8f57da70",
+      "size_bytes": 1343
+    },
+    {
+      "path": "jtag_scan.pgrcmd.log",
+      "kind": "pgrcmd_log",
+      "sha256": "d6ff230e3529d9b4dc0715df8018057fa1bb550a1d4a4288a73859e0d15343d8",
+      "size_bytes": 672
+    },
+    {
+      "path": "jtag_scan.transcript.log",
+      "kind": "command_transcript",
+      "sha256": "22ba88dbf7b67b27e4428413998fac0c6ac8139b9db771b55b293be1ae9a0f19",
+      "size_bytes": 1685
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+schema_version: 1
+board:
+  id: nucleo-g474re
+  revision: UNVERIFIED
+mcu:
+  part: STM32G474RE
+  package: LQFP64
+debug:
+  interface: ST-LINK
+  serial: UNVERIFIED
+scope:
+  model: UNVERIFIED
+  resource: UNVERIFIED
+  host: UNVERIFIED
+  port: UNVERIFIED

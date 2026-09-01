@@ -1,0 +1,14 @@
+{
+  "run": "probe_comp_check",
+  "verdict": "INCOMPLETE",
+  "updated_at": "2026-08-14T02:12:45+00:00",
+  "steps": [
+    {
+      "tool": "scope",
+      "action": "probe_comp_check",
+      "ok": true,
+      "verdict": null,
+      "error": null
+    }
+  ]
+}

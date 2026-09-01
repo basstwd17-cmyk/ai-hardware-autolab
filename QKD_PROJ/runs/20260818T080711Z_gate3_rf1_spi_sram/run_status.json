@@ -1,0 +1,14 @@
+{
+  "run": "gate3_rf1_spi_sram",
+  "verdict": null,
+  "updated_at": "2026-08-18T08:07:11+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "KeyError: 'jtag'"
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+{
+  "run": "gate3_rf1_demo_build",
+  "started_at": "2026-08-18T05:19:59+00:00",
+  "updated_at": "2026-08-18T05:20:06+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate3-rf1-demo",
+    "status": "build_candidate_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate3-rf1-demo.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build"
+    ],
+    "forbidden_operations": [
+      "drive_D2CLK",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 18
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-18T05:19:59+00:00",
+      "duration_s": 6.362,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "rtase_dac_demo",
+        "top": "rtase_dac_demo",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "rtase_dac_demo.v": "dcbee83a79923602ac3a14e51037be65ea81e381cfa50e2437a548991d790399",
+          "rtase_dac_demo.lpf": "c448e82df0f25e30ffea65a75b62104847e96e50226fc50dedd60452dbf40e14"
+        },
+        "active_lpf": "build/rtase_dac_demo.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "d1b[0]": {
+            "pin": 56,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB20B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[10]": {
+            "pin": 68,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB29A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[11]": {
+            "pin": 69,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB29B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[12]": {
+            "pin": 70,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB30A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[13]": {
+            "pin": 71,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB30B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[1]": {
+            "pin": 57,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB21A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[2]": {
+            "pin": 58,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB21B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[3]": {
+            "pin": 59,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB23A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[4]": {
+            "pin": 60,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB23B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[5]": {
+            "pin": 61,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[6]": {
+            "pin": 62,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[7]": {
+            "pin": 63,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24D",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[8]": {
+            "pin": 65,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB27A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[9]": {
+            "pin": 67,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB27B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1clk": {
+            "pin": 73,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PR19B",
+            "drive_ma": 8,
+            "slew": "FAST"
+          },
+          "ldac_a": {
+            "pin": 35,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "sym_a0": {
+            "pin": 85,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR13B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "sym_a1": {
+            "pin": 84,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR14A",
+            "drive_ma": null,
+            "slew": null
+          }
+        },
+        "user_io_count": 18,
+        "bitstream_sha256": "10d33603ce5d92b653713136d5ba97185815d1dcf9ca75d0c5a39d5e0ca5495c",
+        "bitstream_design_sha256": "7ffface184ca22dfc82eba77cd4a38094b7f746008a00dc8e1459524a1fea2b5",
+        "bitstream_bytes": 16127,
+        "expected_io": {
+          "ports": {
+            "sym_a0": 85,
+            "sym_a1": 84,
+            "ldac_a": 35,
+            "d1b[0]": 56,
+            "d1b[1]": 57,
+            "d1b[2]": 58,
+            "d1b[3]": 59,
+            "d1b[4]": 60,
+            "d1b[5]": 61,
+            "d1b[6]": 62,
+            "d1b[7]": 63,
+            "d1b[8]": 65,
+            "d1b[9]": 67,
+            "d1b[10]": 68,
+            "d1b[11]": 69,
+            "d1b[12]": 70,
+            "d1b[13]": 71,
+            "d1clk": 73
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "rtase_dac_demo_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [],
+        "frequency_constraint": "not_applicable_combinational"
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "75133798b3f80c74ddcf20ec26a99ad3c43f423b1d619f7ca9d2b8c4d5da54d5",
+          "size_bytes": 23733
+        },
+        {
+          "path": "rtase_dac_demo_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "10d33603ce5d92b653713136d5ba97185815d1dcf9ca75d0c5a39d5e0ca5495c",
+          "size_bytes": 16127
+        },
+        {
+          "path": "rtase_dac_demo_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "367a93d20b3a37bbec30e91fd18c12db8ea96352a1c388087b83817595f8f40b",
+          "size_bytes": 37838
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "75133798b3f80c74ddcf20ec26a99ad3c43f423b1d619f7ca9d2b8c4d5da54d5",
+      "size_bytes": 23733
+    },
+    {
+      "path": "rtase_dac_demo_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "10d33603ce5d92b653713136d5ba97185815d1dcf9ca75d0c5a39d5e0ca5495c",
+      "size_bytes": 16127
+    },
+    {
+      "path": "rtase_dac_demo_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "367a93d20b3a37bbec30e91fd18c12db8ea96352a1c388087b83817595f8f40b",
+      "size_bytes": 37838
+    }
+  ]
+}

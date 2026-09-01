@@ -1,0 +1,149 @@
+{
+  "run": "bbb_mcspi_ch0conf",
+  "started_at": "2026-08-20T03:33:37+00:00",
+  "updated_at": "2026-08-20T03:33:50+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate9-bbb-host-tooling",
+    "status": "host_tooling_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate9-bbb-host-tooling.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "bbb_ssh_command",
+      "pru_deploy"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "jtag_scan",
+      "nonvolatile_flash",
+      "oscilloscope_capture",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "expected_model_substring": "AM335x BeagleBone Black",
+    "firmware_build_marker": "Built:",
+    "expected_service_state": "active",
+    "expected_ping_reply_hex": "0101",
+    "expected_status_ok": true,
+    "script_hash_must_match_contract": true,
+    "script_returncode": 0
+  },
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": true,
+      "started_at": "2026-08-20T03:33:37+00:00",
+      "duration_s": 12.95,
+      "commands": [
+        "#!/bin/bash\n# Read McSPI0 channel-0 registers, decoded. Read-only with respect to the\n# controller: no register is written, no pinmux is touched, no overlay or\n# firmware changes.\n#\n# Why user-space /dev/mem gives \"Bus error\" here: omap2-mcspi uses runtime PM\n# and gates the module's interface clock when the device is idle. Reading an\n# OMAP peripheral register with its clock gated raises an external abort,\n# which reaches user space as SIGBUS. It is not a permission problem -- the\n# mmap succeeded. So this script pins the device awake through the kernel's\n# own runtime-PM knob first, and restores the previous policy at the end.\n#\n# CH0CONF is also rewritten by the driver for each transfer, so a value read\n# while the bus is idle can be stale. The script therefore samples twice:\n#   phase A  idle, device forced resumed\n#   phase B  during a transfer burst identical to the existing loopback test\n#            (same 6-byte pattern at 100 kHz on /dev/spidev0.0)\nset -u\n\nSPI_DEV=/sys/bus/platform/devices/48030000.spi\nCONTROL=\"$SPI_DEV/power/control\"\nSAVED=auto\n\nrestore() {\n    if [ -w \"$CONTROL\" ] || [ -e \"$CONTROL\" ]; then\n        echo \"$BB_PW\" | sudo -S sh -c \"echo '$SAVED' > '$CONTROL'\" 2>/dev/null || true\n        printf 'restored power/control = '\n        cat \"$CONTROL\" 2>/dev/null || echo \"?\"\n    fi\n    rm -f /tmp/mcspi_ch0conf.py\n}\ntrap restore EXIT\n\necho \"== identity ==\"\ndate -u\nuname -r\ntr -d '\\000' </proc/device-tree/model 2>/dev/null || true\necho\n\necho \"== runtime PM before ==\"\nfor field in power/control power/runtime_status power/runtime_active_time; do\n    [ -e \"$SPI_DEV/$field\" ] || continue\n    printf '%-28s = ' \"$field\"\n    cat \"$SPI_DEV/$field\" 2>/dev/null || true\ndone\nif [ -e \"$CONTROL\" ]; then\n    SAVED=$(cat \"$CONTROL\" 2>/dev/null || echo auto)\nfi\n\necho\necho \"== forcing the module clock on (runtime PM only, reverted on exit) ==\"\necho \"$BB_PW\" | sudo -S sh -c \"echo on > '$CONTROL'\" || true\nfor _ in $(seq 1 20); do\n    state=$(cat \"$SPI_DEV/power/runtime_status\" 2>/dev/null || echo unknown)\n    [ \"$state\" = active ] && break\n    sleep 0.1\ndone\nprintf 'runtime_status = %s\\n' \"$(cat \"$SPI_DEV/power/runtime_status\" 2>/dev/null || echo unknown)\"\n\ncat > /tmp/mcspi_ch0conf.py <<'PY'\n\"\"\"Decode McSPI0 CH0 registers, idle and under traffic. Reads only.\"\"\"\nimport array\nimport ctypes\nimport fcntl\nimport mmap\nimport os\nimport struct\nimport threading\nimport time\n\nBASE = 0x48030000\nSIZE = 0x1000\nREGS = {\n    \"MCSPI_SYSCONFIG\": 0x110,\n    \"MCSPI_SYSSTATUS\": 0x114,\n    \"MCSPI_MODULCTRL\": 0x128,\n    \"MCSPI_CH0CONF\": 0x12C,\n    \"MCSPI_CH0STAT\": 0x130,\n    \"MCSPI_CH0CTRL\": 0x134,\n    \"MCSPI_XFERLEVEL\": 0x17C,\n}\nTRM = {0: \"0 transmit+receive\", 1: \"1 receive only\", 2: \"2 transmit only\", 3: \"3 reserved\"}\n\n\ndef bit(value, index):\n    return (value >> index) & 1\n\n\ndef field(value, high, low):\n    return (value >> low) & ((1 << (high - low + 1)) - 1)\n\n\ndef decode_ch0conf(value):\n    is_bit, dpe1, dpe0 = bit(value, 18), bit(value, 17), bit(value, 16)\n    rx_line = \"D1 (P9_18, the MOSI pad)\" if is_bit else \"D0 (P9_21, the MISO pad)\"\n    if dpe0 == 0 and dpe1 == 1:\n        tx_line = \"D0 (P9_21, the MISO pad)\"\n    elif dpe0 == 1 and dpe1 == 0:\n        tx_line = \"D1 (P9_18, the MOSI pad)\"\n    elif dpe0 == 0 and dpe1 == 0:\n        tx_line = \"BOTH D0 and D1\"\n    else:\n        tx_line = \"NEITHER line enabled for transmission\"\n    lines = [\n        f\"   PHA={bit(value, 0)} POL={bit(value, 1)}  -> SPI mode {bit(value, 1) * 2 + bit(value, 0)}\",\n        f\"   CLKD={field(value, 5, 2)} EPOL={bit(value, 6)} (1 = CS active low)\",\n        f\"   WL={field(value, 11, 7)}  -> {field(value, 11, 7) + 1} bits per word\",\n        f\"   TRM={TRM[field(value, 13, 12)]}\",\n        f\"   DPE0={dpe0} DPE1={dpe1}  -> transmits on {tx_line}\",\n        f\"   IS={is_bit}          -> receives from {rx_line}\",\n        f\"   TURBO={bit(value, 19)} FORCE={bit(value, 20)} SBE={bit(value, 23)}\",\n        f\"   FFEW={bit(value, 27)} FFER={bit(value, 28)} CLKG={bit(value, 29)}\",\n    ]\n    verdict = []\n    if is_bit:\n        verdict.append(\"IS=1: reception is taken from D1, not from the MISO pad\")\n    if dpe0 != 1 or dpe1 != 0:\n        verdict.append(\"DPE pair is not the standard D1-transmit setting\")\n    if field(value, 13, 12) == 2:\n        verdict.append(\"TRM=transmit only: the receive register is never loaded\")\n    if field(value, 11, 7) != 7:\n        verdict.append(\"word length is not 8 bits\")\n    if bit(value, 1) or bit(value, 0):\n        verdict.append(\"clock polarity/phase is not mode 0\")\n    return lines, verdict\n\n\ndef decode_modulctrl(value):\n    return [\n        f\"   SINGLE={bit(value, 0)} (1 = single-channel master)\",\n        f\"   PIN34={bit(value, 1)} (1 = 3-pin mode, CS not used)\",\n        f\"   MS={bit(value, 2)} (0 = master)\",\n        f\"   SYSTEM_TEST={bit(value, 3)} (1 = loopback test mode inside the SoC)\",\n    ]\n\n\ndef decode_ch0stat(value):\n    names = [\"RXS\", \"TXS\", \"EOT\", \"TXFFE\", \"TXFFF\", \"RXFFE\", \"RXFFF\"]\n    return [\"   \" + \" \".join(f\"{name}={bit(value, i)}\" for i, name in enumerate(names))]\n\n\nclass Traffic(threading.Thread):\n    \"\"\"The existing loopback transfer, repeated so CH0CONF holds live values.\"\"\"\n\n    TX = bytes.fromhex(\"00ffaa553cc3\")\n\n    def __init__(self, device=\"/dev/spidev0.0\", speed_hz=100000, seconds=2.0):\n        super().__init__(daemon=True)\n        self.device, self.speed_hz, self.seconds = device, speed_hz, seconds\n        self.results, self.error, self.count = [], None, 0\n\n    def run(self):\n        class Transfer(ctypes.Structure):\n            _fields_ = [\n                (\"tx_buf\", ctypes.c_uint64), (\"rx_buf\", ctypes.c_uint64),\n                (\"len\", ctypes.c_uint32), (\"speed_hz\", ctypes.c_uint32),\n                (\"delay_usecs\", ctypes.c_uint16), (\"bits_per_word\", ctypes.c_uint8),\n                (\"cs_change\", ctypes.c_uint8), (\"tx_nbits\", ctypes.c_uint8),\n                (\"rx_nbits\", ctypes.c_uint8), (\"word_delay_usecs\", ctypes.c_uint8),\n                (\"pad\", ctypes.c_uint8),\n            ]\n\n        request = (1 << 30) | (ctypes.sizeof(Transfer) << 16) | (ord(\"k\") << 8) | 0\n        try:\n            fd = os.open(self.device, os.O_RDWR)\n        except OSError as exc:\n            self.error = f\"open {self.device}: {exc}\"\n            return\n        try:\n            fcntl.ioctl(fd, 0x40016B01, array.array(\"B\", [0]))          # WR_MODE 0\n            fcntl.ioctl(fd, 0x40016B03, array.array(\"B\", [8]))          # WR_BITS\n            fcntl.ioctl(fd, 0x40046B04, array.array(\"I\", [self.speed_hz]))  # WR_SPEED\n            deadline = time.monotonic() + self.seconds\n            while time.monotonic() < deadline:\n                tx = ctypes.create_string_buffer(self.TX, len(self.TX))\n                rx = ctypes.create_string_buffer(len(self.TX))\n                message = Transfer(\n                    tx_buf=ctypes.addressof(tx), rx_buf=ctypes.addressof(rx),\n                    len=len(self.TX), speed_hz=self.speed_hz, bits_per_word=8,\n                )\n                fcntl.ioctl(fd, request, bytes(message))\n                self.count += 1\n                if len(self.results) < 4:\n                    self.results.append(rx.raw.hex())\n                time.sleep(0.002)\n        except OSError as exc:\n            self.error = f\"transfer: {exc}\"\n        finally:\n            os.close(fd)\n\n\ndef read_all(region):\n    return {name: struct.unpack_from(\"<I\", region, offset)[0] for name, offset in REGS.items()}\n\n\ndef report(title, values):\n    print(f\"-- {title}\")\n    for name, value in values.items():\n        print(f\"   {name:<16} = 0x{value:08x}\")\n    print(\"   MODULCTRL:\")\n    for line in decode_modulctrl(values[\"MCSPI_MODULCTRL\"]):\n        print(\"   \" + line)\n    print(\"   CH0CONF:\")\n    lines, verdict = decode_ch0conf(values[\"MCSPI_CH0CONF\"])\n    for line in lines:\n        print(\"   \" + line)\n    print(\"   CH0STAT:\")\n    for line in decode_ch0stat(values[\"MCSPI_CH0STAT\"]):\n        print(\"   \" + line)\n    print(f\"   CH0CTRL EN={values['MCSPI_CH0CTRL'] & 1}\")\n    if verdict:\n        for item in verdict:\n            print(f\"   !! {item}\")\n    else:\n        print(\"   -> matches the standard master configuration for this board\")\n\n\ndef main():\n    fd = os.open(\"/dev/mem\", os.O_RDONLY | os.O_SYNC)\n    try:\n        region = mmap.mmap(fd, SIZE, mmap.MAP_SHARED, mmap.PROT_READ, offset=BASE)\n    except OSError as exc:\n        print(f\"mmap /dev/mem at 0x{BASE:08x} failed: {exc}\")\n        os.close(fd)\n        return 2\n    try:\n        try:\n            idle = read_all(region)\n        except Exception as exc:  # SIGBUS surfaces here only if it is trappable\n            print(f\"register read failed even with the clock forced on: {exc}\")\n            return 2\n        print(\"== phase A: bus idle ==\")\n        report(\"registers with no transfer running\", idle)\n\n        print()\n        print(\"== phase B: during a transfer burst (00ffaa553cc3 @ 100 kHz) ==\")\n        traffic = Traffic()\n        traffic.start()\n        time.sleep(0.05)\n        samples = {}\n        deadline = time.monotonic() + 2.0\n        while time.monotonic() < deadline:\n            values = read_all(region)\n            key = (values[\"MCSPI_CH0CONF\"], values[\"MCSPI_CH0CTRL\"] & 1)\n            samples.setdefault(key, [0, values])\n            samples[key][0] += 1\n            time.sleep(0.005)\n        traffic.join(timeout=5)\n        print(f\"   transfers issued : {traffic.count}\")\n        print(f\"   rx observed      : {', '.join(traffic.results) or '(none)'}\")\n        if traffic.error:\n            print(f\"   transfer error   : {traffic.error}\")\n        print(f\"   distinct CH0CONF values while running: {len(samples)}\")\n        for (conf, enabled), (count, values) in sorted(\n            samples.items(), key=lambda item: -item[1][0]\n        ):\n            print()\n            report(f\"CH0CONF=0x{conf:08x} CH0CTRL.EN={enabled} seen {count}x\", values)\n        return 0\n    finally:\n        region.close()\n        os.close(fd)\n\n\nraise SystemExit(main())\nPY\n\necho\necho \"== McSPI0 registers ==\"\necho \"$BB_PW\" | sudo -S python3 /tmp/mcspi_ch0conf.py\nstatus=$?\n\necho\necho \"== pad configuration re-read (for correlation) ==\"\nfor base in /sys/kernel/debug/pinctrl/*pinmux*; do\n    [ -d \"$base\" ] || continue\n    echo \"$BB_PW\" | sudo -S grep -E \"^pin 8[4-7] \" \"$base/pins\" 2>/dev/null || true\ndone\n\nexit \"$status\""
+      ],
+      "measurements": {
+        "script": "mcspi_ch0conf",
+        "stages": [
+          {
+            "stage": "safety_gate",
+            "ok": true,
+            "duration_s": 0.0
+          },
+          {
+            "stage": "allowlist",
+            "ok": true,
+            "allowed": [
+              "diagnose_rtase",
+              "mcspi_ch0conf",
+              "mcspi_kernel_state"
+            ],
+            "effect": "reads_controller_registers_runs_existing_loopback_traffic",
+            "duration_s": 0.0
+          },
+          {
+            "stage": "script_hash",
+            "ok": true,
+            "path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\mcspi_ch0conf.sh",
+            "sha256": "d29925e22784e8ade8f1e9bab85d485014dc0a9f7fdb1d0d0c354e79207d41c7",
+            "duration_s": 0.0
+          },
+          {
+            "stage": "connect",
+            "ok": true,
+            "duration_s": 2.864
+          },
+          {
+            "stage": "execute",
+            "ok": true,
+            "returncode": 0,
+            "stdout": "== identity ==\nFri Jul 24 17:01:07 UTC 2026\n6.18.39-bone44\nTI AM335x BeagleBone Black\n== runtime PM before ==\npower/control                = auto\npower/runtime_status         = suspended\npower/runtime_active_time    = 92536\n\n== forcing the module clock on (runtime PM only, reverted on exit) ==\nruntime_status = active\n\n== McSPI0 registers ==\n== phase A: bus idle ==\n-- registers with no transfer running\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x200103fc\n   MCSPI_CH0STAT    = 0x00000006\n   MCSPI_CH0CTRL    = 0x00000200\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=0 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=0\n   -> matches the standard master configuration for this board\n\n== phase B: during a transfer burst (00ffaa553cc3 @ 100 kHz) ==\n   transfers issued : 617\n   rx observed      : 000000000000, 000000000000, 000000000000, 000000000000\n   distinct CH0CONF values while running: 2\n\n-- CH0CONF=0x200103fc CH0CTRL.EN=0 seen 268x\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x200103fc\n   MCSPI_CH0STAT    = 0x00000006\n   MCSPI_CH0CTRL    = 0x00000200\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=0 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=0\n   -> matches the standard master configuration for this board\n\n-- CH0CONF=0x201103fc CH0CTRL.EN=1 seen 99x\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x201103fc\n   MCSPI_CH0STAT    = 0x00000007\n   MCSPI_CH0CTRL    = 0x00001d01\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=1 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=1 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=1\n   -> matches the standard master configuration for this board\n\n== pad configuration re-read (for correlation) ==\npin 84 (PIN84) 2:gpio-96-127 44e10950 00000008 pinctrl-single \npin 85 (PIN85) 3:gpio-96-127 44e10954 00000028 pinctrl-single \npin 86 (PIN86) 4:gpio-96-127 44e10958 00000008 pinctrl-single \npin 87 (PIN87) 5:gpio-96-127 44e1095c 00000008 pinctrl-single \nrestored power/control = auto\n",
+            "stderr": "[sudo] password for ***BB_PW***: ",
+            "duration_s": 10.056
+          }
+        ],
+        "script_path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\mcspi_ch0conf.sh",
+        "script_sha256": "d29925e22784e8ade8f1e9bab85d485014dc0a9f7fdb1d0d0c354e79207d41c7",
+        "script_bytes": 10288,
+        "target": {
+          "host": "192.168.50.2",
+          "user": "xilinx",
+          "port": 22
+        },
+        "returncode": 0,
+        "expected_returncode": 0,
+        "stdout": "== identity ==\nFri Jul 24 17:01:07 UTC 2026\n6.18.39-bone44\nTI AM335x BeagleBone Black\n== runtime PM before ==\npower/control                = auto\npower/runtime_status         = suspended\npower/runtime_active_time    = 92536\n\n== forcing the module clock on (runtime PM only, reverted on exit) ==\nruntime_status = active\n\n== McSPI0 registers ==\n== phase A: bus idle ==\n-- registers with no transfer running\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x200103fc\n   MCSPI_CH0STAT    = 0x00000006\n   MCSPI_CH0CTRL    = 0x00000200\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=0 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=0\n   -> matches the standard master configuration for this board\n\n== phase B: during a transfer burst (00ffaa553cc3 @ 100 kHz) ==\n   transfers issued : 617\n   rx observed      : 000000000000, 000000000000, 000000000000, 000000000000\n   distinct CH0CONF values while running: 2\n\n-- CH0CONF=0x200103fc CH0CTRL.EN=0 seen 268x\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x200103fc\n   MCSPI_CH0STAT    = 0x00000006\n   MCSPI_CH0CTRL    = 0x00000200\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=0 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=0 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=0\n   -> matches the standard master configuration for this board\n\n-- CH0CONF=0x201103fc CH0CTRL.EN=1 seen 99x\n   MCSPI_SYSCONFIG  = 0x00000015\n   MCSPI_SYSSTATUS  = 0x00000001\n   MCSPI_MODULCTRL  = 0x00000001\n   MCSPI_CH0CONF    = 0x201103fc\n   MCSPI_CH0STAT    = 0x00000007\n   MCSPI_CH0CTRL    = 0x00001d01\n   MCSPI_XFERLEVEL  = 0x00000000\n   MODULCTRL:\n      SINGLE=1 (1 = single-channel master)\n      PIN34=0 (1 = 3-pin mode, CS not used)\n      MS=0 (0 = master)\n      SYSTEM_TEST=0 (1 = loopback test mode inside the SoC)\n   CH0CONF:\n      PHA=0 POL=0  -> SPI mode 0\n      CLKD=15 EPOL=1 (1 = CS active low)\n      WL=7  -> 8 bits per word\n      TRM=0 transmit+receive\n      DPE0=1 DPE1=0  -> transmits on D1 (P9_18, the MOSI pad)\n      IS=0          -> receives from D0 (P9_21, the MISO pad)\n      TURBO=0 FORCE=1 SBE=0\n      FFEW=0 FFER=0 CLKG=1\n   CH0STAT:\n      RXS=1 TXS=1 EOT=1 TXFFE=0 TXFFF=0 RXFFE=0 RXFFF=0\n   CH0CTRL EN=1\n   -> matches the standard master configuration for this board\n\n== pad configuration re-read (for correlation) ==\npin 84 (PIN84) 2:gpio-96-127 44e10950 00000008 pinctrl-single \npin 85 (PIN85) 3:gpio-96-127 44e10954 00000028 pinctrl-single \npin 86 (PIN86) 4:gpio-96-127 44e10958 00000008 pinctrl-single \npin 87 (PIN87) 5:gpio-96-127 44e1095c 00000008 pinctrl-single \nrestored power/control = auto\n",
+        "stderr": "[sudo] password for ***BB_PW***: ",
+        "stdout_bytes": 3705,
+        "stderr_bytes": 33
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "bbb_run_script.transcript.json",
+          "kind": "ssh_transcript",
+          "sha256": "a791721de0aaf08c336909f14f0710a2a11d648629f25e1f55e4f8da09705297",
+          "size_bytes": 14859
+        },
+        {
+          "path": "run_script.mcspi_ch0conf.stdout.log",
+          "kind": "bbb_stdout",
+          "sha256": "013fecd8bd102109a953b4bdcd97991173e27552f2d2e152af9edab29864f640",
+          "size_bytes": 3811
+        },
+        {
+          "path": "run_script.mcspi_ch0conf.stderr.log",
+          "kind": "bbb_stderr",
+          "sha256": "eca187c4e8662bbc351e6e801329060160df8fe05f0a880e626dfddfcb80f029",
+          "size_bytes": 33
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {}
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "bbb_run_script.transcript.json",
+      "kind": "ssh_transcript",
+      "sha256": "a791721de0aaf08c336909f14f0710a2a11d648629f25e1f55e4f8da09705297",
+      "size_bytes": 14859
+    },
+    {
+      "path": "run_script.mcspi_ch0conf.stdout.log",
+      "kind": "bbb_stdout",
+      "sha256": "013fecd8bd102109a953b4bdcd97991173e27552f2d2e152af9edab29864f640",
+      "size_bytes": 3811
+    },
+    {
+      "path": "run_script.mcspi_ch0conf.stderr.log",
+      "kind": "bbb_stderr",
+      "sha256": "eca187c4e8662bbc351e6e801329060160df8fe05f0a880e626dfddfcb80f029",
+      "size_bytes": 33
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "gate": "gate10-spi-clocked-return.yaml",
+  "iteration": 1,
+  "_note": "The machine-readable half of a Plan for Gate 10, written from the contract's own claim blocks. Each condition names the run the contract says answers it. Nothing here was chosen to make the gate pass.",
+  "conditions": [
+    {
+      "field": "measurements.drc_errors",
+      "expect": 0,
+      "source": "contracts/gate10-spi-clocked-return.yaml pass_criteria.build_errors",
+      "run": "20260820T053323Z_gate10_spi_clocked_return_build"
+    },
+    {
+      "field": "measurements.timing_errors",
+      "expect": 0,
+      "source": "contracts/gate10-spi-clocked-return.yaml pass_criteria.timing_errors",
+      "run": "20260820T053323Z_gate10_spi_clocked_return_build"
+    },
+    {
+      "field": "file:summary.json:scope_mode0_miso_hex",
+      "expect": "a55a3cc3f00f",
+      "source": "contracts/gate10-spi-clocked-return.yaml scope_capture.result.expected_miso_hex",
+      "run": "20260820T055246Z_gate10_scope_clocked_return_5838ca97"
+    },
+    {
+      "field": "file:summary.json:verdict",
+      "expect": "PASS",
+      "source": "contracts/gate10-spi-clocked-return.yaml scope_capture.result.verdict",
+      "run": "20260820T055246Z_gate10_scope_clocked_return_5838ca97"
+    },
+    {
+      "field": "file:summary.json:scope_mode0_mosi_hex",
+      "expect": "000000000000",
+      "source": "contracts/gate10-spi-clocked-return.yaml scope_capture.result.scope_mode0_mosi_hex",
+      "run": "20260820T055246Z_gate10_scope_clocked_return_5838ca97"
+    },
+    {
+      "field": "measurements.observed_rx",
+      "expect": "a55a3cc3f00f",
+      "source": "contracts/gate10-spi-clocked-return.yaml gpio_spi_fallback_result.observed_rx",
+      "run": "20260820T063111Z_gate10_gpio0_3_clocked_return"
+    },
+    {
+      "field": "verdict",
+      "expect": "PASS",
+      "source": "contracts/gate10-spi-clocked-return.yaml gpio_spi_fallback_result.verdict",
+      "run": "20260820T063111Z_gate10_gpio0_3_clocked_return"
+    }
+  ],
+  "corroboration": [
+    {
+      "run": "20260820T064639Z_gate11_gpio_spi_code_regs_sram",
+      "supports": "the GPIO-SPI transport was used again afterwards and the CPLD was programmed over it",
+      "field": "measurements.bit_errors",
+      "note": "Contains jtag_scan and program_sram only. It does not record a GPIO readback, so it cannot stand in for the missing Gate 10 run."
+    },
+    {
+      "run": "20260821T012554Z_gate12_pru_dac1_sram",
+      "supports": "a later GPIO-SPI CODE round trip returned bit_errors 0",
+      "field": "measurements.bit_errors",
+      "note": "The round-trip numbers are in digital_verification.json, which the run never registered as an artifact. Different design, different day; corroborates the transport, not the Gate 10 frame."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "top": "spi_standard_loopback",
+  "ports": {
+    "spi_mosi": 31,
+    "spi_cs_n": 32,
+    "spi_miso": 33
+  },
+  "bitstream_sha256": "2e9c1968b8294929badcda32508b18cb96e20ba9e105dfd964ce92c753c65353",
+  "bitstream_design_sha256": "5c89551cd052880604e09fcc9c3e4300f0b3374b2b4f1a337cb1043e8756010d",
+  "bitstream_bytes": 16049,
+  "source_sha256": {
+    "spi_standard_loopback.v": "0a41cd0d3e7f27d5b382011493745dfd63b9f94f95d05dd9258d3cc0f9da56db",
+    "spi_standard_loopback.lpf": "570999abfdc1a23fff528badbd5841587dbf5958801215ff63fd2cba33cfa584"
+  },
+  "drc_errors": 0,
+  "timing_errors": 0,
+  "user_io": {
+    "spi_cs_n": {
+      "pin": 32,
+      "bank": 3,
+      "buffer_type": "LVCMOS33_IN",
+      "site": "PL19A",
+      "drive_ma": null,
+      "slew": null
+    },
+    "spi_miso": {
+      "pin": 33,
+      "bank": 3,
+      "buffer_type": "LVCMOS33_OUT",
+      "site": "PL19B",
+      "drive_ma": 4,
+      "slew": "SLOW"
+    },
+    "spi_mosi": {
+      "pin": 31,
+      "bank": 3,
+      "buffer_type": "LVCMOS33_IN",
+      "site": "PL18D",
+      "drive_ma": null,
+      "slew": null
+    }
+  }
+}

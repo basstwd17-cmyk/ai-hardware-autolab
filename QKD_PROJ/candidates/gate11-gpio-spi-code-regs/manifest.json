@@ -1,0 +1,166 @@
+{
+  "run": "gate11_gpio_spi_code_regs_build",
+  "started_at": "2026-08-20T06:41:41+00:00",
+  "updated_at": "2026-08-20T06:41:47+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate11-gpio-spi-code-registers",
+    "status": "build_pending",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate11-gpio-spi-code-registers.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 4,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-20T06:41:41+00:00",
+      "duration_s": 6.34,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "spi_gpio_code_regs",
+        "top": "spi_gpio_code_regs",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "spi_gpio_code_regs.v": "f0f31aeebf0db403b74453833a149356925d4ce0803940f0791b305d7436e622",
+          "spi_gpio_code_regs.lpf": "b78242074cdf924a4b95460b7c4b636b8203432c6a3bdefb9a61b6e32a42761c"
+        },
+        "active_lpf": "build/spi_gpio_code_regs.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "spi_cs_n": {
+            "pin": 32,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL19A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_miso": {
+            "pin": 33,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL19B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "spi_mosi": {
+            "pin": 31,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL18D",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_sclk": {
+            "pin": 34,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20A",
+            "drive_ma": null,
+            "slew": null
+          }
+        },
+        "user_io_count": 4,
+        "bitstream_sha256": "c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029",
+        "bitstream_design_sha256": "f77f08b170c2bed49a7574a830e5a65b386f1b20856862ae7ba2222fd2ec864d",
+        "bitstream_bytes": 17182,
+        "expected_io": {
+          "ports": {
+            "spi_mosi": 31,
+            "spi_cs_n": 32,
+            "spi_miso": 33,
+            "spi_sclk": 34
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "spi_gpio_code_regs_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [
+          "FREQUENCY PORT \"spi_sclk\" 1.000000 MHz"
+        ],
+        "max_frequency_mhz": 84.452
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "beedaef10f3fbb78f43f5510c3d18bf0b6fea2bf3b7b2be84615c8d1d54f3da0",
+          "size_bytes": 28890
+        },
+        {
+          "path": "spi_gpio_code_regs_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029",
+          "size_bytes": 17182
+        },
+        {
+          "path": "spi_gpio_code_regs_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "ee03b664b9bf3e79d4d5401db1c22ed804053198adf8b67c49980fe24e45dd8b",
+          "size_bytes": 35721
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "beedaef10f3fbb78f43f5510c3d18bf0b6fea2bf3b7b2be84615c8d1d54f3da0",
+      "size_bytes": 28890
+    },
+    {
+      "path": "spi_gpio_code_regs_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029",
+      "size_bytes": 17182
+    },
+    {
+      "path": "spi_gpio_code_regs_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "ee03b664b9bf3e79d4d5401db1c22ed804053198adf8b67c49980fe24e45dd8b",
+      "size_bytes": 35721
+    }
+  ]
+}

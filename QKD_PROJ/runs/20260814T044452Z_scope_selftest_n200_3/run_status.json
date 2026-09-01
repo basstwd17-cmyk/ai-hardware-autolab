@@ -1,0 +1,14 @@
+{
+  "run": "scope_selftest_n200_3",
+  "verdict": "PASS",
+  "updated_at": "2026-08-14T04:44:56+00:00",
+  "steps": [
+    {
+      "tool": "scope",
+      "action": "probe_comp_check",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

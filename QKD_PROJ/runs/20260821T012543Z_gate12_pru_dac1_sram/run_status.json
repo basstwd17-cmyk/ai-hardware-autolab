@@ -1,0 +1,14 @@
+{
+  "run": "gate12_pru_dac1_sram",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-21T01:25:43+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "jtag_scan",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "KeyError: 'jtag'"
+    }
+  ]
+}

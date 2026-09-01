@@ -1,0 +1,34 @@
+{
+  "top": "spi_reverse_ungated_loopback",
+  "ports": {
+    "spi_from_bbb_d0": 33,
+    "spi_to_bbb_d1": 31
+  },
+  "bitstream_sha256": "eec3dcf72c51fd179d5f52a738eda39186401f77e10bd1f2949c127a8c8a8f79",
+  "bitstream_design_sha256": "2ae3f320e0aa2f9869621af01a38c7ed818325cc648f8e3cbf6a9be462b3149e",
+  "bitstream_bytes": 16042,
+  "source_sha256": {
+    "spi_reverse_ungated_loopback.v": "afcbaae1363457574c862c5d009518ed22ee740a22cd1aa87c7163c6e72ad863",
+    "spi_reverse_ungated_loopback.lpf": "413521b4664279a34e7a9a1758856600d40ad1ac09176aae972eac0ff7e9acc6"
+  },
+  "drc_errors": 0,
+  "timing_errors": 0,
+  "user_io": {
+    "spi_from_bbb_d0": {
+      "pin": 33,
+      "bank": 3,
+      "buffer_type": "LVCMOS33_IN",
+      "site": "PL19B",
+      "drive_ma": null,
+      "slew": null
+    },
+    "spi_to_bbb_d1": {
+      "pin": 31,
+      "bank": 3,
+      "buffer_type": "LVCMOS33_OUT",
+      "site": "PL18D",
+      "drive_ma": 4,
+      "slew": "SLOW"
+    }
+  }
+}

@@ -1,0 +1,76 @@
+schema_version: 1
+
+# These entries do not invent a capability from a filename.  Each one is tied
+# to exact source bytes, an existing reviewed contract, and a PASS run created
+# during the earlier manual bring-up.
+capabilities:
+  - id: bbb-gpio-spi
+    title: BBB GPIO-SPI register transport
+    summary: Known-good four-wire GPIO transport for CPLD CODE register write/readback.
+    mode: hardware
+    agents: [board-operator, design-builder, verifier]
+    skills: [bbb-gpio-spi]
+    operations: [bbb_ssh_command, readback_or_program_status]
+    contracts: [gate11-gpio-spi-code-registers.yaml]
+    runs: [20260820T064639Z_gate11_gpio_spi_code_regs_sram]
+    assets:
+      - path: BeagleBone-Black/host/rtase_spi.py
+        sha256: cf01358744b89d4b55a207afcf2b57f96b20b936cc77dd8cabcfa5ae84ac3dd7
+
+  - id: bbb-pru-control
+    title: BBB PRU finite-run control path
+    summary: PRU firmware, host protocol, and GPIO-SPI/PRU overlay previously checked on channel A.
+    mode: hardware
+    agents: [board-operator, design-builder, verifier]
+    skills: [pru-firmware-builder, host-software-builder]
+    operations: [pru_deploy, bbb_ssh_command]
+    contracts: [gate9-bbb-host-tooling.yaml, gate12-pru-dac1-plan.yaml]
+    runs: [20260821T012554Z_gate12_pru_dac1_sram]
+    assets:
+      - path: BeagleBone-Black/host/rtase.py
+        sha256: 2976d32d31c502006a48cb521c0ce03ec9993112e7f10c072d67c10c47a8dc7c
+      - path: BeagleBone-Black/firmware/main.c
+        sha256: 822038981f39917fb0b9d2da52e3ae8f99383dab98769f0b47a7faaabd9dbfb8
+      - path: BeagleBone-Black/overlay/BB-RTASE-A-GPIO-SPI-PRU-00A0.dts
+        sha256: e47a1cd0aece561d5c7425c4fdc789b4cf01d7967c21cb0c096cf252636acbe4
+
+  - id: gate12-cpld-digital-design
+    title: Gate 12 CPLD digital DAC1 design
+    summary: Scope-limited, digitally verified CPLD mapping from PRU selection to DAC1 data and clock outputs; safe to rebuild offline.
+    mode: offline
+    agents: [design-builder, verifier]
+    skills: [cpld-diamond-build]
+    operations: [diamond_build]
+    contracts: [gate12-pru-dac1-plan.yaml]
+    runs: [20260821T005712Z_gate12_pru_dac1_build]
+    assets:
+      - path: QKD_PROJ/gate12_pru_dac1/gate12_pru_dac1.v
+        sha256: 384410ea6531c1cc60abdae4baee04f0edaeadd64bf6b937b4353d3d7c62fbaa
+      - path: QKD_PROJ/gate12_pru_dac1/gate12_pru_dac1.lpf
+        sha256: 94e2d08877dad503b0ce27400ca64c422c4b94fca65bdca2c74f5a5901da02f7
+
+  - id: rtm3004-scope-capture
+    title: RTM3004 deterministic scope capture
+    summary: Contract-gated oscilloscope capture with a recorded probe-compensation PASS baseline.
+    mode: hardware
+    agents: [measurement, verifier]
+    skills: [scope-measurement]
+    operations: [oscilloscope_capture]
+    contracts: [scope-selftest-spec.yaml]
+    runs: [20260814T044448Z_scope_selftest_n200_2]
+    assets:
+      - path: QKD_PROJ/hwtools/scope.py
+        sha256: d21fffd3aa36198ab9ee84f822ae4cfec1075801d9869683abc0f3ebf6d8209e
+
+  - id: cpld-build-and-program
+    title: CPLD build and volatile SRAM program tooling
+    summary: Existing deterministic CPLD build/program implementation used by the recorded gates.
+    mode: hardware
+    agents: [design-builder, board-operator, verifier]
+    skills: [cpld-diamond-build]
+    operations: [diamond_build, jtag_scan, sram_fast_program]
+    contracts: [gate11-gpio-spi-code-registers.yaml, gate12-pru-dac1-plan.yaml]
+    runs: [20260820T064639Z_gate11_gpio_spi_code_regs_sram]
+    assets:
+      - path: QKD_PROJ/hwtools/cpld.py
+        sha256: 5eb92f352ddecc2fc061fa152437095d5d77506fe45607aad2ac03837a29e296

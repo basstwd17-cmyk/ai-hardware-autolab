@@ -1,0 +1,14 @@
+{
+  "run": "gate3_spi_path_diag_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-19T01:00:43+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

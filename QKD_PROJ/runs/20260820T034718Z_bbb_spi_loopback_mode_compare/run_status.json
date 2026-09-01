@@ -1,0 +1,14 @@
+{
+  "run": "bbb_spi_loopback_mode_compare",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-20T03:47:26+00:00",
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "'spi_loopback_mode_compare' exited 1, contract expects 0."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run": "job_195482831ea2",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-24T07:07:17+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "Port 'ldac_a' is placed on pin 35 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73."
+    }
+  ]
+}

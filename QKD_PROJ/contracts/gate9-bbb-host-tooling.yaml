@@ -1,0 +1,207 @@
+schema_version: 1
+test_id: gate9-bbb-host-tooling
+status: host_tooling_only
+
+purpose:
+  - Give layer 3 a recorded path to the BeagleBone Black -- deploy the PRU firmware
+    and run reviewed diagnostics -- with every command, exit code and file hash in
+    the run record.
+  - Touch nothing on the RTASE_V1 board itself. This contract exists so that
+    "these tools do not program the CPLD and do not enable RF output" is enforced
+    by SafetyGate rather than promised in a comment.
+
+# Both operations reach a powered board over the network, so neither is
+# read-only: allow_hardware=True is still required to call them.
+allowed_operations: [bbb_ssh_command, pru_deploy]
+
+# Not decoration. program_cpld_sram(), scan_jtag() and measure_gate1_gpio()
+# all call gate.require() with these names, so handing this contract to one of
+# them raises SafetyViolation instead of running.
+forbidden_operations:
+  - jtag_scan
+  - sram_fast_program
+  - nonvolatile_flash
+  - readback_or_program_status
+  - oscilloscope_capture
+  - drive_any_D1B_bus
+  - drive_D1CLK
+  - drive_any_D2B_bus
+  - drive_D2CLK
+  - enable_analog_output
+
+connection:
+  # Read from the environment, never defaulted. bb.py, provision.py and
+  # provision_rtase.py each carry a different default address (192.168.0.4,
+  # beagle.local, 192.168.50.2); a tool that guesses can reboot a board
+  # somebody else is using.
+  env: [BB_HOST, BB_USER, BB_PW]
+  optional_env: [BB_PORT]
+  password_handling: >-
+    BB_PW is exported on the remote shell so reviewed scripts can drive
+    sudo -S, and is redacted out of every recorded command, stdout and stderr
+    by SshTransport before it reaches the manifest.
+
+bbb:
+  # Checked before anything is uploaded. The lab has other xilinx/xilinx
+  # boards on the same subnet.
+  target_model_substring: AM335x BeagleBone Black
+  repo_root: BeagleBone-Black
+  remote_root: pru
+
+  firmware:
+    build_dir: pru0_pulse_io
+    build_output: gen/pru0_pulse_io.out
+    pru_cgt: /usr/share/ti/cgt-pru
+    installed_as: /lib/firmware/am335x-pru0-rtase.out
+
+  service:
+    # deploy_pru() restarts this unit rather than writing remoteproc directly.
+    # The unit's ExecStart already does the stop/start sequence, and having two
+    # code paths that both drive remoteproc means boot and deploy can leave the
+    # board in different states.
+    unit: rtase-pru.service
+    helper: /usr/local/sbin/rtase-pru-service
+    active_timeout_s: 130
+    # Installing the unit itself stays with BeagleBone-Black/host/provision_rtase.py.
+    # deploy_pru() refuses rather than provisioning a board it did not set up.
+    installed_by: host/provision_rtase.py
+
+  verify:
+    rpmsg_device: /dev/rpmsg0
+    status_command: python3 ~/pru/rtase.py --local status
+    # firmware/main.c: 0x01 PING -> [0x01][0x01]
+    ping_request_hex: "01"
+    ping_reply_hex: "0101"
+
+  # Uploaded by deploy_pru(), hashed locally, then re-hashed on the board and
+  # compared. Trees are walked in sorted order; every file is hashed.
+  deploy:
+    - {local: firmware, remote: pru/pru0_pulse_io, kind: tree}
+    - {local: host/rtase.py, remote: pru/rtase.py, kind: file}
+    - {local: host/rtase_spi.py, remote: pru/rtase_spi.py, kind: file}
+
+# run_bbb() executes a script from this list and nothing else. The allowlist
+# is keyed by content hash, not by path, for the same reason bitstream
+# approvals are: between review and execution a path can be made to point at a
+# different file, and a hash cannot.
+#
+# Adding an entry is a human edit. Two scripts are deliberately absent:
+#   diagnostics/rtase_diag_pinmux.py  writes pinmux registers through /dev/mem
+#   scripts/install_*_overlay.sh      rewrite /boot/uEnv.txt and reboot
+# Both would fight whoever is currently bringing the board up.
+scripts:
+  diagnose_rtase:
+    path: BeagleBone-Black/scripts/diagnose_rtase.sh
+    sha256: 52f8d89e7662be1c58cd4ce97517bc5a0b507e06e5cd026cee17648e3bf27ac9
+    effect: read_only
+    expected_returncode: 0
+    description: >-
+      Dumps identity, boot overlay, remoteproc state, device nodes, loaded
+      modules, matching device-tree nodes and the filtered kernel log.
+
+  mcspi_kernel_state:
+    path: BeagleBone-Black/diagnostics/mcspi_kernel_state.sh
+    sha256: 2348081f4ce660454dba72ce573d248db1117d6467568c87e3100841952a77f8
+    effect: read_only
+    expected_returncode: 0
+    description: >-
+      McSPI0 state as the kernel already holds it: applied spi0 device-tree
+      node (including whether ti,pindir-d0-out-d1-in is present, which decides
+      the data-line direction), enumerated SPI bus, spidev ioctl read-back of
+      mode/CPOL/CPHA/speed, pinctrl-single pad configuration for pins 84-87,
+      driver binding and the spi lines of dmesg. No writes, no /dev/mem, no
+      SPI transfer -- the sudo calls are reads of debugfs and dmesg only.
+
+  mcspi_ch0conf:
+    path: BeagleBone-Black/diagnostics/mcspi_ch0conf.sh
+    sha256: d29925e22784e8ade8f1e9bab85d485014dc0a9f7fdb1d0d0c354e79207d41c7
+    effect: reads_controller_registers_runs_existing_loopback_traffic
+    expected_returncode: 0
+    description: >-
+      Decodes McSPI0 MODULCTRL/CH0CONF/CH0STAT/CH0CTRL. No controller register
+      is written. Two deliberate side effects, both reverted or already
+      routine: power/control is set to 'on' so the module clock is not gated
+      during the read (this is why /dev/mem returns SIGBUS otherwise) and
+      restored on exit, and the existing 6-byte loopback transfer is repeated
+      at 100 kHz for two seconds so CH0CONF holds the values the driver
+      actually programs for a transfer rather than a stale idle value.
+
+  spi_loopback_mode_compare:
+    path: BeagleBone-Black/diagnostics/spi_loopback_mode_compare.sh
+    sha256: 516c8089473bf24c9fa9050d399ffb5d2bdfec301e1e84e66a9f06ac8f533086
+    effect: runs_non_dac_loopback_frame_in_modes_0_and_1_then_restores_spidev_settings
+    expected_returncode: 0
+    description: >-
+      Sends only 00ffaa553cc3 through the currently loaded non-DAC CPLD
+      loopback in SPI modes 0 and 1 at 100 kHz (64 transfers per mode).
+      It records exact RX values and restores the spidev mode, word length,
+      and speed observed before the test. No JTAG, CPLD programming, overlay,
+      pinmux, PRU, DAC, or analog-output operation occurs.
+
+  spi_clocked_response_verify:
+    path: BeagleBone-Black/diagnostics/spi_clocked_response_verify.sh
+    # Corrected 2026-08-27: the digest recorded here in a2e47df never matched
+    # the file. That commit added both the script and this contract, the script
+    # has not been touched since, and its blob has always hashed to 735c91d3.
+    # A transcription error, not drift -- gate10-spi-clocked-return (f301a03)
+    # records the correct value for the same file. Until this was fixed,
+    # run_bbb refused the script at QKD_PROJ/hwtools/bbb.py:249.
+    sha256: 735c91d33748dce731fde0a909a19178b00f7a756782fe311120bb2d128aac72
+    effect: reads_fixed_non_dac_clocked_spi_response_then_restores_spidev_settings
+    expected_returncode: 0
+    description: >-
+      Sends 000000000000 at SPI mode 0 and 100 kHz, then records 32 responses
+      from the currently loaded clocked MISO diagnostic. The expected fixed
+      response is a55a3cc3f00f. It restores mode, word length, and speed read
+      on entry. No JTAG, CPLD programming, overlay, pinmux, PRU, DAC, or
+      analog-output operation occurs.
+
+  p9_21_gpio_loopback_probe:
+    path: BeagleBone-Black/diagnostics/p9_21_gpio_loopback_probe.sh
+    sha256: bc695161fea36f3512c22af6e95b082307a389b1c135561124763fa3a629768a
+    effect: temporarily_muxes_P9_17_P9_18_P9_21_as_GPIO_then_restores_exact_state
+    expected_returncode: 0
+    description: >-
+      Temporarily makes P9_17 (GPIO0_5) and P9_18 (GPIO0_4) outputs and
+      P9_21 (GPIO0_3) an input. It drives only CS=0 and MOSI=1 so the existing
+      gate4 non-DAC loopback must drive MISO/P9_21 high, samples GPIO0_3 32
+      times, and restores the original padmux values (0x08, 0x08, 0x28), GPIO0
+      output latch/direction, and GPIO runtime-PM policy in a finally block.
+      The asserted static diagnostic state lasts two seconds for scope
+      correlation. It refuses before asserting either GPIO if the active SPI
+      pinctrl consumer prevents all three padmux values from changing.
+      It does not drive SCLK or any DAC, PRU, JTAG, analog, boot, overlay, or
+      CPLD-programming operation.
+
+  mcspi_loopback_selftest:
+    path: BeagleBone-Black/diagnostics/mcspi_loopback_selftest.sh
+    sha256: 9a346387c74a33f9d55d5e904f5f366374f2a8f527fc3f8cb86db8305ef104f8
+    effect: sets_spidev_mode_runs_existing_loopback_traffic
+    expected_returncode: 0
+    description: >-
+      Runs the same 6-byte transfer three ways in one session: external path,
+      SPI_LOOP internal loopback (MODULCTRL.SYSTEM_TEST, pins ignored), then
+      external again. Separates a broken SoC receive datapath from a pad input
+      that is not delivering what a scope sees on the pin, and clears the test
+      harness itself of suspicion. Writes only the spidev mode (restored to 0)
+      and the runtime-PM policy (restored on exit); no controller register,
+      pinmux, overlay or firmware is written. If the driver rejects SPI_LOOP
+      the script says so and stops rather than writing SYSTEM_TEST directly.
+
+pass_criteria:
+  # deploy_pru()
+  expected_model_substring: AM335x BeagleBone Black
+  firmware_build_marker: "Built:"
+  expected_service_state: active
+  expected_ping_reply_hex: "0101"
+  expected_status_ok: true
+  # run_bbb()
+  script_hash_must_match_contract: true
+  script_returncode: 0
+
+stop_conditions:
+  - The remote /proc/device-tree/model does not contain the expected substring.
+  - An uploaded file's hash on the board differs from the hash of the bytes sent.
+  - A script is requested that is not in the allowlist, or whose content hash
+    no longer matches the reviewed value.
+  - rtase-pru.service is not installed on the target.

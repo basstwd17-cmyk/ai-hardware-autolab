@@ -1,0 +1,39 @@
+/*
+ * Temporary GPIO bit-bang SPI pinmux for RTASE channel A.
+ *
+ * This deliberately disables McSPI0.  The electrical connections remain:
+ *   P9_17 GPIO0_5  -> CPLD CS   (output, active low)
+ *   P9_18 GPIO0_4  -> CPLD MOSI (output)
+ *   P9_21 GPIO0_3  <- CPLD MISO (input)
+ *   P9_22 GPIO0_2  -> CPLD SCLK (output, CPOL=0)
+ * It is a diagnostic/product fallback while the McSPI receive path is fixed.
+ */
+/dts-v1/;
+/plugin/;
+
+&{/chosen} {
+	overlays {
+		BB-RTASE-A-GPIO-SPI-00A0.kernel = "rtase-gpio-bitbang-spi";
+	};
+};
+
+&am33xx_pinmux {
+	rtase_gpio_spi_pins: rtase_gpio_spi_pins {
+		pinctrl-single,pins = <
+			0x15c 0x07 0x00 /* P9_17 GPIO0_5 output */
+			0x158 0x07 0x00 /* P9_18 GPIO0_4 output */
+			0x154 0x27 0x00 /* P9_21 GPIO0_3 input, receiver enabled */
+			0x150 0x07 0x00 /* P9_22 GPIO0_2 output */
+		>;
+	};
+};
+
+&spi0 {
+	status = "disabled";
+};
+
+&gpio0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&rtase_gpio_spi_pins>;
+};

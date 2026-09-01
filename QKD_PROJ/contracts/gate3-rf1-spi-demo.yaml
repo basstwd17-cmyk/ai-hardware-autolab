@@ -1,0 +1,115 @@
+schema_version: 1
+test_id: gate3-rf1-spi-demo
+status: fixed_candidate_programmed_spi_readback_failed
+
+purpose:
+  - Configure and read back four 14-bit CODE registers over BBB SPI0.
+  - Keep Linux SPI outside the PRU real-time selection and update path.
+  - Drive DAC1/RF1 only; leave DAC2 bus and clock unused.
+
+allowed_operations: [diamond_build, jtag_scan]
+forbidden_operations: [sram_fast_program, nonvolatile_flash, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+spi:
+  mode: 0
+  configured_speed_hz: 1000000
+  timing_constraint_mhz: 10
+  bit_order: MSB_first
+  frame_bytes: 3
+  command_byte:
+    bit7: {write: 0, read: 1}
+    bits6_2: must_be_zero
+    bits1_0: register_address_0_to_3
+  data_bytes: "00dddddd dddddddd (14-bit code)"
+  read_transaction: "TX [0x80|addr, 0x00, 0x00], RX [0x00, code[13:8], code[7:0]]"
+  write_transaction: "TX [addr, code[13:8], code[7:0]]"
+  initial_codes: [0x0000, 0x1555, 0x2AAA, 0x3FFF]
+
+signal_path:
+  spi:
+    - {name: spi_mosi, bbb_pin: P9_18, board_net: SPI.MOSI, cpld_pin: 31, direction: input}
+    - {name: spi_cs_n, bbb_pin: P9_17, board_net: SPI.CS, cpld_pin: 32, direction: input}
+    - {name: spi_miso, bbb_pin: P9_21, board_net: SPI.MISO, cpld_pin: 33, direction: output}
+    - {name: spi_sclk, bbb_pin: P9_22, board_net: SPI.CLK, cpld_pin: 34, direction: input}
+  select:
+    - {name: sym_a0, pru: PRU0_R30_15, bbb_pin: P8_11, cpld_pin: 85}
+    - {name: sym_a1, pru: PRU0_R30_14, bbb_pin: P8_12, cpld_pin: 84}
+  update: {name: ldac_a, pru: PRU0_R30_0, bbb_pin: P9_31, cpld_input_pin: 35, d1clk_pin: 73}
+  dac_data_pins_lsb_to_msb: [56, 57, 58, 59, 60, 61, 62, 63, 65, 67, 68, 69, 70, 71]
+
+test_design:
+  top: rtase_dac_spi
+  timing_model: spi_sclk_registers_plus_combinational_code_mux_and_clock_forward
+  sources:
+    hdl: QKD_PROJ/rtase_dac_spi/rtase_dac_spi.v
+    constraints: QKD_PROJ/rtase_dac_spi/rtase_dac_spi.lpf
+  outputs:
+    - {name: spi_miso, cpld_pin: 33, io_type: LVCMOS33}
+
+expected_user_io_count: 22
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 22
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+  register_write_readback_bit_errors: 0
+
+build_result:
+  status: passed
+  run: 20260818T081436Z_gate3_rf1_spi_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  drc_warnings: 0
+  timing_errors: 0
+  timing_constraint_mhz: 10
+  max_frequency_mhz: 69.478
+  source_sha256:
+    rtase_dac_spi.v: e3c2497807ce70248a7f20bf4881a399dd9c2425a36f2a63c4c0a9df0f64f8d2
+    rtase_dac_spi.lpf: ebb20d5f9797bbb5ebd62c66714c37649dc82854158ea7fa566a2855e6669f97
+  bitstream_sha256: 580168c60393b56dc32eaaf532c9d0ccef6209936dd4d51af07f4c798a4fb81a
+  bitstream_design_sha256: fa757b7c0fcba95e8a210c86cefdf51670009adae124ceef0717c8e9cb0140e4
+  bitstream_bytes: 17639
+
+previous_sram_program:
+  status: executed_failed_spi_readback
+  execution_run: 20260818T080756Z_gate3_rf1_spi_sram
+  directory: QKD_PROJ/candidates/gate3-rf1-spi
+  bitstream_sha256: 9dd18b6d7ca61e84e2cb1587349feb24b55295fbad1e0102ab15fced6121136f
+  bitstream_design_sha256: 56f9e9c204a099d5ad03c4589da5aefbb2471cf30d92466f98216c3f3b57adce
+  approval_executions_used: 1
+  diagnosis: spi_cs_n_was_promoted_to_active_low_device_wide_gsr
+
+sram_program_candidate:
+  status: executed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-18
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260818T084338Z_gate3_rf1_spi_v2_sram
+  execution_result: PASS
+  post_program_spi_readback: FAIL_all_zero
+  directory: QKD_PROJ/candidates/gate3-rf1-spi-v2
+  bitstream: rtase_dac_spi_impl1.bit
+  bitstream_sha256: 580168c60393b56dc32eaaf532c9d0ccef6209936dd4d51af07f4c798a4fb81a
+  bitstream_design_sha256: fa757b7c0fcba95e8a210c86cefdf51670009adae124ceef0717c8e9cb0140e4
+  bitstream_bytes: 17639
+  source_sha256:
+    rtase_dac_spi.v: e3c2497807ce70248a7f20bf4881a399dd9c2425a36f2a63c4c0a9df0f64f8d2
+    rtase_dac_spi.lpf: ebb20d5f9797bbb5ebd62c66714c37649dc82854158ea7fa566a2855e6669f97
+  companion_sha256:
+    rtase_dac_spi_impl1.pad: 825b9af132c9a024576aede9b5c5ed047658341320198e8e2610a4652bb563df
+    build.log: 26421966a763037867a6f929f88e4173b10fbc8efbb718c484b32fe92ed8cb6a
+    manifest.json: d2d08e1040f4b904c8835e3715c33371d04bb0e7460a13dd6a6061a76ae66877
+  immutable: true
+
+stop_conditions:
+  - Any D2B bit or D2CLK is configured as an output.
+  - SPI MOSI, CS, or SCLK is configured as a CPLD output.
+  - SPI MISO is configured as a CPLD input.

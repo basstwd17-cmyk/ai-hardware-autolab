@@ -1,0 +1,85 @@
+schema_version: 1
+test_id: scope-selftest-probe-comp
+status: active
+architecture_profile: windows_single_pc_cli
+
+purpose:
+  - Prove the measurement path end to end against a signal the instrument
+    generates itself, before trusting anything measured on a board.
+  - Catch a broken toolchain, a wrong termination, or a silently changed probe
+    factor without needing a DUT.
+
+# Nothing on this test touches the RTASE board. The source is the front-panel
+# probe compensation terminal.
+signal_source:
+  terminal: probe_compensation
+  channel: 3
+  connection: passive probe tip to [Probe Comp.], ground clip to the adjacent tab
+
+instrument:
+  model: RTM3004
+  required_options:
+    # Nx Single is only available with the history option. Without it,
+    # ACQuire:NSINgle:COUNt is ignored and the count silently free-runs.
+    - K15
+
+allowed_operations:
+  - scope_identify
+  - oscilloscope_capture
+
+forbidden_operations:
+  - enable_generator_output
+  - enable_analog_output
+  - nonvolatile_flash
+  - drive_any_board_pin
+
+pass_criteria:
+  expected_frequency_hz: 1000.0
+  frequency_tolerance_percent: 1.0
+  required_termination: 1_Mohm
+  # The statistics must cover exactly the number of acquisitions that was
+  # requested. Free-running RUN accumulates between polls: a run that asked for
+  # 50 covered 227, which would make any "N=50" claim false.
+  exact_sample_count: true
+  required_records:
+    - probe_attenuation
+    - coupling
+    - sample_count
+    - retrieval_path
+
+amplitude:
+  judged: false
+  reason: >-
+    The instrument labels MEASurement PEAK as "Vpp" on screen, so the reading is
+    peak to peak. But the probe compensation output amplitude has not been
+    confirmed against a published figure, and it moved 0.9 percent between two
+    runs with the probe trimmer untouched. Recorded, not judged, until a
+    reference value is established. Judging it now would assert a check that was
+    never actually made.
+  observed_vpp:
+    - {run: 20260814T044441Z, average: 1.6268, stddev: 0.015778, n: 200}
+    - {run: 20260814T044448Z, average: 1.6268, stddev: 0.015729, n: 200}
+    - {run: 20260814T044452Z, average: 1.6268, stddev: 0.016464, n: 200}
+
+# Six consecutive Nx Single runs, three at N=200 and three at N=50, all PASS
+# with the acquisition count matching the request exactly on both measurement
+# places. The average is identical across every run; only the spread moves.
+observed_frequency_hz:
+  - {run: 20260814T044441Z, average: 999.84, stddev: 0.108, n: 200, count: 200}
+  - {run: 20260814T044448Z, average: 999.84, stddev: 0.1152, n: 200, count: 200}
+  - {run: 20260814T044452Z, average: 999.84, stddev: 0.108, n: 200, count: 200}
+  - {run: 20260814T044523Z, average: 999.84, stddev: 0.1176, n: 50, count: 50}
+
+# Superseded: before Nx Single, free-running RUN covered 218 and 227
+# acquisitions for a requested 50. Kept as the reason exact_sample_count exists.
+superseded_free_running_runs:
+  - {run: 20260814T021028Z, requested: 50, actual: 218}
+  - {run: 20260814T021238Z, requested: 50, actual: 227}
+
+stop_conditions:
+  - Connected instrument model differs from the contract.
+  - A required option is missing from *OPT?.
+  - The probed channel is not on a 1 Mohm input.
+  - The actual acquisition count differs from the requested count.
+  - The SCPI error queue is not empty after a configuration group.
+  - A required record is absent from the measurements.

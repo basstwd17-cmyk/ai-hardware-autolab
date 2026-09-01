@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <title>RTASE Remote</title>
+    <link rel="stylesheet" href="/remote.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><span class="eyebrow">RTASE AGENT PLATFORM</span><h1>Remote control</h1></div>
+        <span id="online" class="pill offline">DISCONNECTED</span>
+      </header>
+
+      <section id="login" class="card">
+        <h2>연구실 연결</h2>
+        <p>Cloudflare에 설정한 operator token과 장치 이름을 입력하세요. 토큰은 이 탭의 sessionStorage에만 보관됩니다.</p>
+        <label>장치 이름<input id="device" value="lab-pc" maxlength="100" /></label>
+        <label>Operator token<input id="token" type="password" autocomplete="off" /></label>
+        <button id="connect" class="primary">연결</button>
+      </section>
+
+      <div id="workspace" hidden>
+        <section class="card">
+          <div class="section-head"><h2>새 시나리오</h2><span>조사 → 설계 → 계약</span></div>
+          <label>목표<input id="objective" placeholder="예: RF1/RF2 타이밍 출력 개선" maxlength="4000" /></label>
+          <label>시나리오<textarea id="scenario" placeholder="구현하고 싶은 기능과 허용 범위를 적으세요" maxlength="4000"></textarea></label>
+          <label>검색 정책<select id="search-policy"><option value="refresh">변경되거나 모르는 부분 재조사</option><option value="reuse">기존 지식 우선</option><option value="full">전체 재조사</option></select></label>
+          <button id="start-mission" class="primary">Mission 시작</button>
+        </section>
+
+        <section class="card">
+          <div class="section-head"><h2>Jobs</h2><span id="cursor">cursor 0</span></div>
+          <div id="jobs" class="jobs"><p class="muted">아직 동기화된 job이 없습니다.</p></div>
+        </section>
+
+        <section class="card approval-card">
+          <div class="section-head"><h2>승인 요청</h2><span id="approval-count">0 pending</span></div>
+          <p class="muted">Campaign 범위 밖의 실제 동작만 표시됩니다. 승인 또는 거절은 로컬 원장에 결정자와 의견을 함께 기록합니다.</p>
+          <div id="approvals" class="approvals"><p class="muted">대기 중인 승인이 없습니다.</p></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head"><h2>선택한 Job</h2><b id="selected-job">선택 없음</b></div>
+          <div id="job-summary" class="job-summary"><p class="muted">Job을 선택하면 검증 결과와 다음 행동을 표시합니다.</p></div>
+          <label>보내는 사람<input id="actor" value="quantum1" maxlength="100" /></label>
+          <label>피드백·진행 방향<textarea id="message" placeholder="다음 에이전트에게 전달할 방향을 적으세요" maxlength="4000"></textarea></label>
+          <div class="actions">
+            <button id="steer" disabled>메시지 보내기</button>
+            <button id="campaign-preview" disabled>Campaign 범위 계산</button>
+            <button id="revise" disabled>재설계 요청</button>
+            <button id="cancel" class="danger" disabled>중단</button>
+          </div>
+          <div id="proposal" class="proposal" hidden>
+            <h3>검토된 Campaign 범위</h3>
+            <pre id="proposal-text"></pre>
+            <button id="approve" class="primary">이 범위 승인 + 의견 전달</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head"><h2>최근 명령</h2><button id="disconnect" class="text">로그아웃</button></div>
+          <div id="commands" class="commands"></div>
+        </section>
+      </div>
+      <p id="notice" role="status"></p>
+    </main>
+    <script type="module" src="/remote.js"></script>
+  </body>
+</html>

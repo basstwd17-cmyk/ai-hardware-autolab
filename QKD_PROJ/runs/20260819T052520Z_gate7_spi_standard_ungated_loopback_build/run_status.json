@@ -1,0 +1,14 @@
+{
+  "run": "gate7_spi_standard_ungated_loopback_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-19T05:25:27+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

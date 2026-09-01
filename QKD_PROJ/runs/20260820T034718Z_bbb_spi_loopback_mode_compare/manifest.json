@@ -1,0 +1,140 @@
+{
+  "run": "bbb_spi_loopback_mode_compare",
+  "started_at": "2026-08-20T03:47:18+00:00",
+  "updated_at": "2026-08-20T03:47:26+00:00",
+  "verdict": "FAIL",
+  "contract": {
+    "test_id": "gate9-bbb-host-tooling",
+    "status": "host_tooling_only",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate9-bbb-host-tooling.yaml",
+    "allow_hardware": true,
+    "allowed_operations": [
+      "bbb_ssh_command",
+      "pru_deploy"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "jtag_scan",
+      "nonvolatile_flash",
+      "oscilloscope_capture",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "expected_model_substring": "AM335x BeagleBone Black",
+    "firmware_build_marker": "Built:",
+    "expected_service_state": "active",
+    "expected_ping_reply_hex": "0101",
+    "expected_status_ok": true,
+    "script_hash_must_match_contract": true,
+    "script_returncode": 0
+  },
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": false,
+      "started_at": "2026-08-20T03:47:18+00:00",
+      "duration_s": 7.572,
+      "commands": [
+        "#!/bin/bash\n# Compare the two CPHA choices using only the already-approved non-DAC\n# loopback frame.  This neither programs the CPLD nor changes pinmux/overlay\n# state.  The spidev settings observed on entry are restored before exit.\nset -euo pipefail\n\npython3 - <<'PY'\nimport array\nimport ctypes\nimport fcntl\nimport os\n\nDEVICE = \"/dev/spidev0.0\"\nSPEED_HZ = 100_000\nTX = bytes.fromhex(\"00ffaa553cc3\")\nTRANSFERS_PER_MODE = 64\n\n\ndef ioc(direction, kind, number, size):\n    return (direction << 30) | (size << 16) | (kind << 8) | number\n\n\nSPI_IOC_RD_MODE = ioc(2, ord(\"k\"), 1, 1)\nSPI_IOC_WR_MODE = ioc(1, ord(\"k\"), 1, 1)\nSPI_IOC_RD_BITS_PER_WORD = ioc(2, ord(\"k\"), 3, 1)\nSPI_IOC_WR_BITS_PER_WORD = ioc(1, ord(\"k\"), 3, 1)\nSPI_IOC_RD_MAX_SPEED_HZ = ioc(2, ord(\"k\"), 4, 4)\nSPI_IOC_WR_MAX_SPEED_HZ = ioc(1, ord(\"k\"), 4, 4)\n\n\nclass Transfer(ctypes.Structure):\n    _fields_ = [\n        (\"tx_buf\", ctypes.c_uint64),\n        (\"rx_buf\", ctypes.c_uint64),\n        (\"len\", ctypes.c_uint32),\n        (\"speed_hz\", ctypes.c_uint32),\n        (\"delay_usecs\", ctypes.c_uint16),\n        (\"bits_per_word\", ctypes.c_uint8),\n        (\"cs_change\", ctypes.c_uint8),\n        (\"tx_nbits\", ctypes.c_uint8),\n        (\"rx_nbits\", ctypes.c_uint8),\n        (\"word_delay_usecs\", ctypes.c_uint8),\n        (\"pad\", ctypes.c_uint8),\n    ]\n\n\nSPI_IOC_MESSAGE_1 = ioc(1, ord(\"k\"), 0, ctypes.sizeof(Transfer))\n\n\ndef read_u8(fd, request):\n    value = array.array(\"B\", [0])\n    fcntl.ioctl(fd, request, value, True)\n    return value[0]\n\n\ndef read_u32(fd, request):\n    value = array.array(\"I\", [0])\n    fcntl.ioctl(fd, request, value, True)\n    return value[0]\n\n\ndef write_u8(fd, request, value):\n    fcntl.ioctl(fd, request, array.array(\"B\", [value]))\n\n\ndef write_u32(fd, request, value):\n    fcntl.ioctl(fd, request, array.array(\"I\", [value]))\n\n\ndef transfer(fd):\n    tx_buffer = ctypes.create_string_buffer(TX, len(TX))\n    rx_buffer = ctypes.create_string_buffer(len(TX))\n    message = Transfer(\n        tx_buf=ctypes.addressof(tx_buffer),\n        rx_buf=ctypes.addressof(rx_buffer),\n        len=len(TX),\n        speed_hz=SPEED_HZ,\n        bits_per_word=8,\n    )\n    fcntl.ioctl(fd, SPI_IOC_MESSAGE_1, bytes(message))\n    return bytes(rx_buffer.raw)\n\n\nfd = os.open(DEVICE, os.O_RDWR)\ntry:\n    original = (\n        read_u8(fd, SPI_IOC_RD_MODE),\n        read_u8(fd, SPI_IOC_RD_BITS_PER_WORD),\n        read_u32(fd, SPI_IOC_RD_MAX_SPEED_HZ),\n    )\n    print(\n        \"entry mode=%d bits=%d speed_hz=%d\" % original\n    )\n    for mode in (0, 1):\n        write_u8(fd, SPI_IOC_WR_MODE, mode)\n        write_u8(fd, SPI_IOC_WR_BITS_PER_WORD, 8)\n        write_u32(fd, SPI_IOC_WR_MAX_SPEED_HZ, SPEED_HZ)\n        observed = [transfer(fd) for _ in range(TRANSFERS_PER_MODE)]\n        matches = sum(reply == TX for reply in observed)\n        distinct = sorted({reply.hex() for reply in observed})\n        print(\n            \"mode=%d tx=%s matches=%d/%d rx_distinct=%s\"\n            % (mode, TX.hex(), matches, TRANSFERS_PER_MODE, \",\".join(distinct))\n        )\nfinally:\n    try:\n        write_u8(fd, SPI_IOC_WR_MODE, original[0])\n        write_u8(fd, SPI_IOC_WR_BITS_PER_WORD, original[1])\n        write_u32(fd, SPI_IOC_WR_MAX_SPEED_HZ, original[2])\n        print(\"restored mode=%d bits=%d speed_hz=%d\" % original)\n    finally:\n        os.close(fd)\nPY"
+      ],
+      "measurements": {
+        "script": "spi_loopback_mode_compare",
+        "stages": [
+          {
+            "stage": "safety_gate",
+            "ok": true,
+            "duration_s": 0.0
+          },
+          {
+            "stage": "allowlist",
+            "ok": true,
+            "allowed": [
+              "diagnose_rtase",
+              "mcspi_ch0conf",
+              "mcspi_kernel_state",
+              "mcspi_loopback_selftest",
+              "spi_loopback_mode_compare"
+            ],
+            "effect": "runs_non_dac_loopback_frame_in_modes_0_and_1_then_restores_spidev_settings",
+            "duration_s": 0.0
+          },
+          {
+            "stage": "script_hash",
+            "ok": true,
+            "path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\spi_loopback_mode_compare.sh",
+            "sha256": "516c8089473bf24c9fa9050d399ffb5d2bdfec301e1e84e66a9f06ac8f533086",
+            "duration_s": 0.0
+          },
+          {
+            "stage": "connect",
+            "ok": true,
+            "duration_s": 2.884
+          },
+          {
+            "stage": "execute",
+            "ok": false,
+            "returncode": 1,
+            "stdout": "entry mode=0 bits=8 speed_hz=1000000\nmode=0 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000\nmode=1 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000\nrestored mode=0 bits=8 speed_hz=1000000\n",
+            "stderr": "",
+            "duration_s": 4.667
+          }
+        ],
+        "script_path": "C:\\KIST\\BeagleBone-Black\\diagnostics\\spi_loopback_mode_compare.sh",
+        "script_sha256": "516c8089473bf24c9fa9050d399ffb5d2bdfec301e1e84e66a9f06ac8f533086",
+        "script_bytes": 3293,
+        "target": {
+          "host": "192.168.50.2",
+          "user": "xilinx",
+          "port": 22
+        },
+        "returncode": 1,
+        "expected_returncode": 0,
+        "stdout": "entry mode=0 bits=8 speed_hz=1000000\nmode=0 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000\nmode=1 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000\nrestored mode=0 bits=8 speed_hz=1000000\n",
+        "stderr": "",
+        "stdout_bytes": 199,
+        "stderr_bytes": 0,
+        "failed_stage": "execute"
+      },
+      "verdict": "FAIL",
+      "artifacts": [
+        {
+          "path": "bbb_run_script.transcript.json",
+          "kind": "ssh_transcript",
+          "sha256": "8232ba61b27722b7683c378bbfef60c54443dcd73feeac2b01fd155b99836e80",
+          "size_bytes": 3867
+        },
+        {
+          "path": "run_script.spi_loopback_mode_compare.stdout.log",
+          "kind": "bbb_stdout",
+          "sha256": "a30ad544e9d76b37f02ad822661bd80649cc556f6330db96ac065020fb327e7d",
+          "size_bytes": 203
+        }
+      ],
+      "warnings": [],
+      "error": "'spi_loopback_mode_compare' exited 1, contract expects 0.",
+      "versions": {}
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "bbb_run_script.transcript.json",
+      "kind": "ssh_transcript",
+      "sha256": "8232ba61b27722b7683c378bbfef60c54443dcd73feeac2b01fd155b99836e80",
+      "size_bytes": 3867
+    },
+    {
+      "path": "run_script.spi_loopback_mode_compare.stdout.log",
+      "kind": "bbb_stdout",
+      "sha256": "a30ad544e9d76b37f02ad822661bd80649cc556f6330db96ac065020fb327e7d",
+      "size_bytes": 203
+    }
+  ]
+}

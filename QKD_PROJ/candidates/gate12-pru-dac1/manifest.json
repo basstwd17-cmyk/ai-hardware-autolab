@@ -1,0 +1,31 @@
+{
+  "test_id": "gate12-pru-dac1-plan",
+  "status": "pinned_not_approved",
+  "build_run": "20260821T005712Z_gate12_pru_dac1_build",
+  "device": "LCMXO2-4000HC-4TG144C",
+  "top": "gate12_pru_dac1",
+  "bitstream": {
+    "file": "gate12_pru_dac1_impl1.bit",
+    "sha256": "dfedb3d06846b9c65020873ad26a7a634e5d49b4b6b1ad1e3880ee702f5ce2d4",
+    "design_sha256": "90b8bd3a56f0a7e492b2101bf2783e423b563f576acead63f116120a0a1691cd",
+    "bytes": 17662
+  },
+  "sources": {
+    "gate12_pru_dac1.v": "384410ea6531c1cc60abdae4baee04f0edaeadd64bf6b937b4353d3d7c62fbaa",
+    "gate12_pru_dac1.lpf": "94e2d08877dad503b0ce27400ca64c422c4b94fca65bdca2c74f5a5901da02f7"
+  },
+  "companions": {
+    "gate12_pru_dac1_impl1.pad": "c9c9690ebb79bf783c703e69e6560229ac55a1f6b58a48f4a57c6f50d8c48d09",
+    "build.log": "d5fa58d2ebacd712d7cbaa1d15178db18507501f067b7701519b68564f408f17"
+  },
+  "safety": {
+    "startup_codes": ["0x0000", "0x0000", "0x0000", "0x0000"],
+    "placed_user_io_count": 22,
+    "only_dac_channel": "D1",
+    "d2_outputs_present": false,
+    "external_gsr_signal": false,
+    "hardware_program_approved": false,
+    "analog_power_approved": false
+  }
+}
+

@@ -1,0 +1,14 @@
+{
+  "run": "gate2_bbb_cpld_loopback_build",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-18T05:04:44+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "No FREQUENCY preference was scored. The design was placed without a clock constraint, so the timing result means nothing."
+    }
+  ]
+}

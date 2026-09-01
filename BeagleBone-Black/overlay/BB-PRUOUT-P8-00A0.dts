@@ -1,0 +1,34 @@
+/*
+ * BB-PRUOUT-P8-00A0.dts  (3-value pinctrl-single format for the bone 6.18 kernel)
+ * This kernel's am33xx_pinmux uses #pinctrl-cells=<2> => THREE cells per pin:
+ *   <offset  conf  mux>   and the applied pad value = (conf | mux).
+ * (Verified against base-DTB groups, e.g. i2c0 <0x188 0x30 0x00>, leds <0x54 0x00 0x07>.)
+ *
+ *   P8_11 = gpmc_ad13 (off 0x034): value 0x0e = MODE6(0x06)|NO_PULL(0x08)  -> pr1_pru0_pru_r30_15 OUTPUT (out0)
+ *   P8_12 = gpmc_ad12 (off 0x030): value 0x0e = MODE6|NO_PULL              -> pr1_pru0_pru_r30_14 OUTPUT (out1)
+ *   P8_16 = gpmc_ad14 (off 0x038): value 0x2e = MODE6|INPUT_EN(0x20)|NO_PULL -> pr1_pru0_pru_r31_14 INPUT
+ */
+/dts-v1/;
+/plugin/;
+
+&{/chosen} {
+	overlays {
+		BB-PRUOUT-P8-00A0.kernel = "v2-3cell-P8_11+P8_12-out-P8_16-in";
+	};
+};
+
+&am33xx_pinmux {
+	pruio_pins: pruio_pins {
+		pinctrl-single,pins = <
+			0x034 0x0e 0x00		/* P8_11 -> R30.15 OUTPUT (out0, pad=0x0e) */
+			0x030 0x0e 0x00		/* P8_12 -> R30.14 OUTPUT (out1, pad=0x0e) */
+			0x038 0x2e 0x00		/* P8_16 -> R31.14 INPUT  (pad=0x2e) */
+		>;
+	};
+};
+
+&pruss {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pruio_pins>;
+};

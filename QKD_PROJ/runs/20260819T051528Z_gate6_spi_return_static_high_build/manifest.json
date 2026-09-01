@@ -1,0 +1,138 @@
+{
+  "run": "gate6_spi_return_static_high_build",
+  "started_at": "2026-08-19T05:15:28+00:00",
+  "updated_at": "2026-08-19T05:15:35+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate6-spi-return-static-high",
+    "status": "build_pending",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate6-spi-return-static-high.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan",
+      "sram_fast_program"
+    ],
+    "forbidden_operations": [
+      "drive_D1CLK",
+      "drive_D2CLK",
+      "drive_any_D1B_bus",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "nonvolatile_flash"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_user_io_count": 1,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-19T05:15:28+00:00",
+      "duration_s": 7.424,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "spi_return_static_high",
+        "top": "spi_return_static_high",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "spi_return_static_high.v": "9dbf351932698a4917fd21e5e71fb0c3d914d030b9d7759d8e53e793b0d771d9",
+          "spi_return_static_high.lpf": "83b47abaf04e566670c1b797eca9fd163401cd69b2bc77aef269037e1dc1dbe6"
+        },
+        "active_lpf": "build/spi_return_static_high.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "spi_to_bbb_d1": {
+            "pin": 31,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL18D",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          }
+        },
+        "user_io_count": 1,
+        "bitstream_sha256": "2251c50ea67d5196dab20ede5fe24bfe2a76d20b99a9992183274ed508536f2d",
+        "bitstream_design_sha256": "d485816277270f954024a709ec05ac8cd055e03a6ec244c28a15f7848ae3e6a0",
+        "bitstream_bytes": 16032,
+        "expected_io": {
+          "ports": {
+            "spi_to_bbb_d1": 31
+          },
+          "drive_ma": null,
+          "slew": null,
+          "io_type": "LVCMOS33",
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "spi_return_static_high_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [],
+        "frequency_constraint": "not_applicable_combinational"
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "d9a8fe1d3fe65ce324e53519c0eed8c8476fedc65166563f1813d90024c78e4d",
+          "size_bytes": 23611
+        },
+        {
+          "path": "spi_return_static_high_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "2251c50ea67d5196dab20ede5fe24bfe2a76d20b99a9992183274ed508536f2d",
+          "size_bytes": 16032
+        },
+        {
+          "path": "spi_return_static_high_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "364f5c6a69c71af1a7ee352116813eabc1c7af80982c0d1dd17dbb70ae31fa77",
+          "size_bytes": 35263
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "d9a8fe1d3fe65ce324e53519c0eed8c8476fedc65166563f1813d90024c78e4d",
+      "size_bytes": 23611
+    },
+    {
+      "path": "spi_return_static_high_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "2251c50ea67d5196dab20ede5fe24bfe2a76d20b99a9992183274ed508536f2d",
+      "size_bytes": 16032
+    },
+    {
+      "path": "spi_return_static_high_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "364f5c6a69c71af1a7ee352116813eabc1c7af80982c0d1dd17dbb70ae31fa77",
+      "size_bytes": 35263
+    }
+  ]
+}

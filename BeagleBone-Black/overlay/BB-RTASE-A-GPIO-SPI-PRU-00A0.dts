@@ -1,0 +1,64 @@
+/*
+ * Gate12 combined pinmux for RTASE channel A.
+ *
+ * GPIO-SPI configuration path (McSPI0 deliberately disabled):
+ *   P9_17 GPIO0_5  -> CPLD CS
+ *   P9_18 GPIO0_4  -> CPLD MOSI
+ *   P9_21 GPIO0_3  <- CPLD MISO
+ *   P9_22 GPIO0_2  -> CPLD SCLK
+ *
+ * PRU0 real-time path:
+ *   P8_11 R30.15 -> SYM.A0
+ *   P8_12 R30.14 -> SYM.A1
+ *   P9_31 R30.0  -> LDASC.A / DAC update request
+ *
+ * /boot/uEnv.txt must also contain:
+ *   disable_uboot_overlay_audio=1
+ *   disable_uboot_overlay_video=1
+ * The overlay itself does not edit uEnv.txt and does not reboot the BBB.
+ */
+/dts-v1/;
+/plugin/;
+
+&{/chosen} {
+    overlays {
+        BB-RTASE-A-GPIO-SPI-PRU-00A0.kernel =
+            "gate12-gpio-spi+pru0-channel-a";
+    };
+};
+
+&am33xx_pinmux {
+    gate12_gpio_spi_pins: gate12_gpio_spi_pins {
+        pinctrl-single,pins = <
+            0x15c 0x07 0x00 /* P9_17 GPIO0_5 output: CS */
+            0x158 0x07 0x00 /* P9_18 GPIO0_4 output: MOSI */
+            0x154 0x27 0x00 /* P9_21 GPIO0_3 input: MISO */
+            0x150 0x07 0x00 /* P9_22 GPIO0_2 output: SCLK */
+        >;
+    };
+
+    gate12_pru0_pins: gate12_pru0_pins {
+        pinctrl-single,pins = <
+            0x034 0x0e 0x00 /* P8_11 PRU0 R30.15: SYM.A0 */
+            0x030 0x0e 0x00 /* P8_12 PRU0 R30.14: SYM.A1 */
+            0x190 0x0d 0x00 /* P9_31 PRU0 R30.0: LDASC.A */
+        >;
+    };
+};
+
+&spi0 {
+    status = "disabled";
+};
+
+&gpio0 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&gate12_gpio_spi_pins>;
+};
+
+&pruss {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&gate12_pru0_pins>;
+};
+

@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rtase-agent-platform",
+  "compatibility_date": "2026-09-01",
+  "pages_build_output_dir": "../frontend/dist",
+  "d1_databases": [
+    {
+      "binding": "RELAY_DB",
+      "database_name": "rtase-relay",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ]
+}

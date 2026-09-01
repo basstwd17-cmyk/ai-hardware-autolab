@@ -1,0 +1,14 @@
+{
+  "run": "gate3_spi_path_diag_build",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-19T01:00:05+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "Port 'alive' is on pin 52, contract requires 80."
+    }
+  ]
+}

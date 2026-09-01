@@ -1,0 +1,7 @@
+# Test A: BBB standard SPI0 direction.
+LOCATE COMP "spi_mosi" SITE "31";
+IOBUF PORT "spi_mosi" IO_TYPE=LVCMOS33;
+LOCATE COMP "spi_cs_n" SITE "32";
+IOBUF PORT "spi_cs_n" IO_TYPE=LVCMOS33;
+LOCATE COMP "spi_miso" SITE "33";
+IOBUF PORT "spi_miso" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;

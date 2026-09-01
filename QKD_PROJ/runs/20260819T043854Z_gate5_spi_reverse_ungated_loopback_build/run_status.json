@@ -1,0 +1,14 @@
+{
+  "run": "gate5_spi_reverse_ungated_loopback_build",
+  "verdict": "PASS",
+  "updated_at": "2026-08-19T04:39:03+00:00",
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "verdict": "PASS",
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run": "bbb_mcspi_kernel_state",
+  "verdict": "FAIL",
+  "updated_at": "2026-08-20T03:07:14+00:00",
+  "steps": [
+    {
+      "tool": "bbb",
+      "action": "run_script",
+      "ok": false,
+      "verdict": "FAIL",
+      "error": "Missing BBB connection environment: BB_HOST, BB_USER, BB_PW. Set them for the board this session is allowed to touch; there is no default host."
+    }
+  ]
+}

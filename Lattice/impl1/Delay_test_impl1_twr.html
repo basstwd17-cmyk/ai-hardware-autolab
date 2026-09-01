@@ -1,0 +1,213 @@
+<HTML>
+<HEAD><TITLE>Lattice TRACE Report</TITLE>
+<STYLE TYPE="text/css">
+<!--
+ body,pre{    font-family:'Courier New', monospace;    color: #000000;    font-size:88%;    background-color: #ffffff;}h1 {    font-weight: bold;    margin-top: 24px;    margin-bottom: 10px;    border-bottom: 3px solid #000;    font-size: 1em;}h2 {    font-weight: bold;    margin-top: 18px;    margin-bottom: 5px;    font-size: 0.90em;}h3 {    font-weight: bold;    margin-top: 12px;    margin-bottom: 5px;    font-size: 0.80em;}p {    font-size:78%;}P.Table {    margin-top: 4px;    margin-bottom: 4px;    margin-right: 4px;    margin-left: 4px;}table{    border-width: 1px 1px 1px 1px;    border-style: solid solid solid solid;    border-color: black black black black;    border-collapse: collapse;}th {    font-weight:bold;    padding: 4px;    border-width: 1px 1px 1px 1px;    border-style: solid solid solid solid;    border-color: black black black black;    vertical-align:top;    text-align:left;    font-size:78%;}td {    padding: 4px;    border-width: 1px 1px 1px 1px;    border-style: solid solid solid solid;    border-color: black black black black;    vertical-align:top;    font-size:78%;}a {    color:#013C9A;    text-decoration:none;}a:visited {    color:#013C9A;}a:hover, a:active {    text-decoration:underline;    color:#5BAFD4;}.pass{background-color: #00ff00;}.fail{background-color: #ff0000;}.comment{    font-size: 90%;    font-style: italic;}
+-->
+</STYLE>
+</HEAD>
+<PRE><A name="Par_Twr"></A><B><U><big>Place & Route TRACE Report</big></U></B>
+
+Loading design for application trce from file delay_test_impl1.ncd.
+Design name: bbb_cpld_test
+NCD version: 3.3
+Vendor:      LATTICE
+Device:      LCMXO2-4000HC
+Package:     TQFP144
+Performance: 4
+Loading device for application trce from file 'xo2c4000.nph' in environment: C:/lscc/diamond/3.14/ispfpga.
+Package Status:                     Final          Version 1.44.
+Performance Hardware Data Status:   Final          Version 36.4.
+Setup and Hold Report
+
+--------------------------------------------------------------------------------
+<A name="Par_Twr_setup"></A><B><U><big>Lattice TRACE Report - Setup, Version Diamond (64-bit) 3.14.0.75.2</big></U></B>
+Thu Aug 13 10:19:36 2026
+
+Copyright (c) 1991-1994 by NeoCAD Inc. All rights reserved.
+Copyright (c) 1995 AT&T Corp.   All rights reserved.
+Copyright (c) 1995-2001 Lucent Technologies Inc.  All rights reserved.
+Copyright (c) 2001 Agere Systems   All rights reserved.
+Copyright (c) 2002-2024 Lattice Semiconductor Corporation,  All rights reserved.
+
+<A name="ptwr_set_ri"></A><B><U><big>Report Information</big></U></B>
+------------------
+Command line:    trce -v 10 -gt -sethld -sp 4 -sphld m -o Delay_test_impl1.twr -gui -msgset C:/KIST/Lattice/promote.xml Delay_test_impl1.ncd Delay_test_impl1.prf 
+Design file:     delay_test_impl1.ncd
+Preference file: delay_test_impl1.prf
+Device,speed:    LCMXO2-4000HC,4
+Report level:    verbose report, limited to 10 items per preference
+--------------------------------------------------------------------------------
+
+<A name="ptwr_set_ps"></A><B><U><big>Preference Summary</big></U></B>
+
+<LI><A href='#par_twr_pref_0_0' Target='right'>Default path enumeration(0 errors)</A></LI>            4 items scored, 0 timing errors detected.
+
+<LI><A href='#par_twr_pref_0_1' Target='right'>Default net enumeration(0 errors)</A></LI>            3 items scored, 0 timing errors detected.
+
+BLOCK ASYNCPATHS
+BLOCK RESETPATHS
+--------------------------------------------------------------------------------
+
+
+
+================================================================================
+<A name="par_twr_pref_0_0"></A>Preference: Default path enumeration
+            4 items scored, 0 timing errors detected.
+--------------------------------------------------------------------------------
+
+Report:   10.063ns delay sel1 to dbg_xor
+
+   Name    Fanout   Delay (ns)          Site               Resource
+PADI_DEL    ---     1.132         34.PAD to       34.PADDI sel1
+ROUTE         2     4.653       34.PADDI to      R2C21A.B0 dbg1_c_c
+CTOF_DEL    ---     0.495      R2C21A.B0 to      R2C21A.F0 SLICE_0
+ROUTE         1     0.986      R2C21A.F0 to      122.PADDO dbg_xor_c
+DOPAD_DEL   ---     2.797      122.PADDO to        122.PAD dbg_xor
+                  --------
+                   10.063   (44.0% logic, 56.0% route), 3 logic levels.
+
+Report:    9.848ns delay sel0 to dbg0
+
+   Name    Fanout   Delay (ns)          Site               Resource
+PADI_DEL    ---     1.132         35.PAD to       35.PADDI sel0
+ROUTE         2     5.919       35.PADDI to      117.PADDO dbg0_c_c
+DOPAD_DEL   ---     2.797      117.PADDO to        117.PAD dbg0
+                  --------
+                    9.848   (39.9% logic, 60.1% route), 2 logic levels.
+
+Report:    9.806ns delay sel0 to dbg_xor
+
+   Name    Fanout   Delay (ns)          Site               Resource
+PADI_DEL    ---     1.132         35.PAD to       35.PADDI sel0
+ROUTE         2     4.396       35.PADDI to      R2C21A.C0 dbg0_c_c
+CTOF_DEL    ---     0.495      R2C21A.C0 to      R2C21A.F0 SLICE_0
+ROUTE         1     0.986      R2C21A.F0 to      122.PADDO dbg_xor_c
+DOPAD_DEL   ---     2.797      122.PADDO to        122.PAD dbg_xor
+                  --------
+                    9.806   (45.1% logic, 54.9% route), 3 logic levels.
+
+Report:    9.391ns delay sel1 to dbg1
+
+   Name    Fanout   Delay (ns)          Site               Resource
+PADI_DEL    ---     1.132         34.PAD to       34.PADDI sel1
+ROUTE         2     5.462       34.PADDI to      121.PADDO dbg1_c_c
+DOPAD_DEL   ---     2.797      121.PADDO to        121.PAD dbg1
+                  --------
+                    9.391   (41.8% logic, 58.2% route), 2 logic levels.
+
+Report:   10.063ns is the maximum delay for this preference.
+
+
+================================================================================
+<A name="par_twr_pref_0_1"></A>Preference: Default net enumeration
+            3 items scored, 0 timing errors detected.
+--------------------------------------------------------------------------------
+
+Report:    5.919ns maximum delay on dbg0_c_c
+
+           Delays             Connection(s)
+           5.919ns         35.PADDI to 117.PADDO       
+           4.396ns         35.PADDI to R2C21A.C0       
+
+Report:    5.462ns maximum delay on dbg1_c_c
+
+           Delays             Connection(s)
+           5.462ns         34.PADDI to 121.PADDO       
+           4.653ns         34.PADDI to R2C21A.B0       
+
+Report:    0.986ns maximum delay on dbg_xor_c
+
+           Delays             Connection(s)
+           0.986ns        R2C21A.F0 to 122.PADDO       
+
+Report:    5.919ns is the maximum delay for this preference.
+
+<A name="ptwr_set_rs"></A><B><U><big>Report Summary</big></U></B>
+--------------
+----------------------------------------------------------------------------
+Preference                              |   Constraint|       Actual|Levels
+----------------------------------------------------------------------------
+                                        |             |             |
+Default path enumeration                |     0.000 ns|    10.063 ns|   0  
+                                        |             |             |
+Default net enumeration                 |     0.000 ns|     5.919 ns|   0  
+                                        |             |             |
+----------------------------------------------------------------------------
+
+
+All preferences were met.
+
+
+<A name="ptwr_set_clkda"></A><B><U><big>Clock Domains Analysis</big></U></B>
+------------------------
+
+Found 0 clocks:
+
+
+<A name="ptwr_set_ts"></A><B><U><big>Timing summary (Setup):</big></U></B>
+---------------
+
+Timing errors: 0  Score: 0
+Cumulative negative slack: 0
+
+Constraints cover 4 paths, 3 nets, and 5 connections (100.00% coverage)
+
+--------------------------------------------------------------------------------
+
+
+
+
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+</PRE></FONT>
+</BODY>
+</HTML>

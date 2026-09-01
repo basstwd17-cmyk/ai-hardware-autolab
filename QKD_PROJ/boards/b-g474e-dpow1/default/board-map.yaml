@@ -1,0 +1,22 @@
+schema_version: 1
+board:
+  id: b-g474e-dpow1
+  revision: default
+mcu:
+  part: STM32G474RETx
+  package: LQFP64
+debug:
+  interface: ST-LINK
+  serial: UNVERIFIED
+scope:
+  model: UNVERIFIED
+  resource: UNVERIFIED
+  host: UNVERIFIED
+  port: UNVERIFIED
+signals:
+  td1:
+    mcu_pin: PB14
+    connector_pin: UNVERIFIED
+  td2:
+    mcu_pin: PB15
+    connector_pin: UNVERIFIED

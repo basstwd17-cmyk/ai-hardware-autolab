@@ -1,0 +1,2 @@
+# Host-side Python deps (Windows/Linux/macOS) for provisioning + verification.
+paramiko>=3.0

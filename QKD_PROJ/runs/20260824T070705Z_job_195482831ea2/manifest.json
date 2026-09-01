@@ -1,0 +1,420 @@
+{
+  "run": "job_195482831ea2",
+  "started_at": "2026-08-24T07:07:05+00:00",
+  "updated_at": "2026-08-24T07:07:17+00:00",
+  "verdict": "FAIL",
+  "contract": {
+    "test_id": "gate12-pru-dac1-plan",
+    "status": "digital_control_path_verified_scope_limited",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate12-pru-dac1-plan.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build",
+      "readback_or_program_status"
+    ],
+    "forbidden_operations": [
+      "drive_D2CLK",
+      "drive_any_D2B_bus",
+      "enable_analog_output",
+      "jtag_scan",
+      "nonvolatile_flash",
+      "sram_fast_program"
+    ]
+  },
+  "pass_criteria": {
+    "build_errors": 0,
+    "timing_errors": 0,
+    "expected_device_count": 1,
+    "expected_idcode": 19644483,
+    "exact_user_io_count": 22,
+    "exact_dac_channel_outputs": [
+      "D1B",
+      "D1CLK"
+    ],
+    "prohibited_outputs_absent": [
+      "D2B",
+      "D2CLK"
+    ]
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": false,
+      "started_at": "2026-08-24T07:07:05+00:00",
+      "duration_s": 11.069,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "gate12_pru_dac1",
+        "top": "gate12_pru_dac1",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "gate12_pru_dac1.v": "384410ea6531c1cc60abdae4baee04f0edaeadd64bf6b937b4353d3d7c62fbaa",
+          "gate12_pru_dac1.lpf": "94e2d08877dad503b0ce27400ca64c422c4b94fca65bdca2c74f5a5901da02f7"
+        },
+        "active_lpf": "build/gate12_pru_dac1.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "d1b[0]": {
+            "pin": 56,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB20B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[10]": {
+            "pin": 68,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB29A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[11]": {
+            "pin": 69,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB29B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[12]": {
+            "pin": 70,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB30A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[13]": {
+            "pin": 71,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB30B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[1]": {
+            "pin": 57,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB21A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[2]": {
+            "pin": 58,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB21B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[3]": {
+            "pin": 59,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB23A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[4]": {
+            "pin": 60,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB23B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[5]": {
+            "pin": 61,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[6]": {
+            "pin": 62,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[7]": {
+            "pin": 63,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB24D",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[8]": {
+            "pin": 65,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB27A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1b[9]": {
+            "pin": 67,
+            "bank": 2,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PB27B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "d1clk": {
+            "pin": 73,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PR19B",
+            "drive_ma": 8,
+            "slew": "FAST"
+          },
+          "ldac_a": {
+            "pin": 35,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_cs_n": {
+            "pin": 32,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL19A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_miso": {
+            "pin": 33,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PL19B",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          },
+          "spi_mosi": {
+            "pin": 31,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL18D",
+            "drive_ma": null,
+            "slew": null
+          },
+          "spi_sclk": {
+            "pin": 34,
+            "bank": 3,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PL20A",
+            "drive_ma": null,
+            "slew": null
+          },
+          "sym_a0": {
+            "pin": 85,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR13B",
+            "drive_ma": null,
+            "slew": null
+          },
+          "sym_a1": {
+            "pin": 84,
+            "bank": 1,
+            "buffer_type": "LVCMOS33_IN",
+            "site": "PR14A",
+            "drive_ma": null,
+            "slew": null
+          }
+        },
+        "user_io_count": 22,
+        "bitstream_sha256": "a848613ab810cf1f22ae053d31b9b7dc5130b12f5fb5681daef12de2321a0869",
+        "bitstream_design_sha256": "90b8bd3a56f0a7e492b2101bf2783e423b563f576acead63f116120a0a1691cd",
+        "bitstream_bytes": 17662,
+        "expected_io": {
+          "ports": {
+            "spi_miso": 33,
+            "d1b[0]": 56,
+            "d1b[1]": 57,
+            "d1b[2]": 58,
+            "d1b[3]": 59,
+            "d1b[4]": 60,
+            "d1b[5]": 61,
+            "d1b[6]": 62,
+            "d1b[7]": 63,
+            "d1b[8]": 65,
+            "d1b[9]": 67,
+            "d1b[10]": 68,
+            "d1b[11]": 69,
+            "d1b[12]": 70,
+            "d1b[13]": 71,
+            "d1clk": 73
+          },
+          "drive_ma": 4,
+          "slew": "SLOW",
+          "io_type": "LVCMOS33",
+          "port_properties": {
+            "spi_miso": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[0]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[1]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[2]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[3]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[4]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[5]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[6]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[7]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[8]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[9]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[10]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[11]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[12]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1b[13]": {
+              "drive_ma": 4,
+              "slew": "SLOW",
+              "io_type": "LVCMOS33"
+            },
+            "d1clk": {
+              "drive_ma": 8,
+              "slew": "FAST",
+              "io_type": "LVCMOS33"
+            }
+          },
+          "source": "argument"
+        },
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0,
+        "timing_reports_scored": [
+          "gate12_pru_dac1_impl1.twr"
+        ],
+        "timing_errors": 0,
+        "timing_preferences": [
+          "FREQUENCY PORT \"spi_sclk\" 10.000000 MHz"
+        ],
+        "max_frequency_mhz": 67.326,
+        "frequency_constraint": "not_applicable_combinational"
+      },
+      "verdict": "FAIL",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "426c479a1296f0cf4520e24e196dd4c4852ff194c407a591485940503616afdf",
+          "size_bytes": 29326
+        },
+        {
+          "path": "gate12_pru_dac1_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "a848613ab810cf1f22ae053d31b9b7dc5130b12f5fb5681daef12de2321a0869",
+          "size_bytes": 17662
+        },
+        {
+          "path": "gate12_pru_dac1_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "ed329abd30feed577e43802e6786d1d530f6b69c91cece08b9497cbc30ed184a",
+          "size_bytes": 38442
+        }
+      ],
+      "warnings": [
+        "Port 'ldac_a' is placed on pin 35 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+        "Port 'spi_cs_n' is placed on pin 32 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+        "Port 'spi_mosi' is placed on pin 31 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+        "Port 'spi_sclk' is placed on pin 34 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+        "Port 'sym_a0' is placed on pin 85 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+        "Port 'sym_a1' is placed on pin 84 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73."
+      ],
+      "error": "Port 'ldac_a' is placed on pin 35 but the contract does not allow it. Gate 1 permits only spi_miso@33, d1b[0]@56, d1b[1]@57, d1b[2]@58, d1b[3]@59, d1b[4]@60, d1b[5]@61, d1b[6]@62, d1b[7]@63, d1b[8]@65, d1b[9]@67, d1b[10]@68, d1b[11]@69, d1b[12]@70, d1b[13]@71, d1clk@73.",
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "426c479a1296f0cf4520e24e196dd4c4852ff194c407a591485940503616afdf",
+      "size_bytes": 29326
+    },
+    {
+      "path": "gate12_pru_dac1_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "a848613ab810cf1f22ae053d31b9b7dc5130b12f5fb5681daef12de2321a0869",
+      "size_bytes": 17662
+    },
+    {
+      "path": "gate12_pru_dac1_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "ed329abd30feed577e43802e6786d1d530f6b69c91cece08b9497cbc30ed184a",
+      "size_bytes": 38442
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+schema_version: 1
+test_id: gate6-spi-return-static-high
+status: candidate_awaiting_approval
+
+purpose:
+  - Isolate U2 pin 31 to BBB P9_18 return wiring without SPI, DAC, SMA, or PRU activity.
+  - Drive only U2 pin 31 high at LVCMOS33, 4 mA, slow slew.
+
+allowed_operations: [diamond_build, jtag_scan, sram_fast_program]
+forbidden_operations: [nonvolatile_flash, drive_any_D1B_bus, drive_D1CLK, drive_any_D2B_bus, drive_D2CLK, enable_analog_output]
+
+jtag:
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_return_static_high
+  sources:
+    hdl: QKD_PROJ/spi_return_static_high/spi_return_static_high.v
+    constraints: QKD_PROJ/spi_return_static_high/spi_return_static_high.lpf
+  driven_path:
+    source: {cpld_pin: 31, bbb_pin: P9_18, value: high}
+
+pass_criteria:
+  build_errors: 0
+  timing_errors: 0
+  expected_user_io_count: 1
+  expected_device_count: 1
+  expected_idcode: 0x012BC043
+
+build_result:
+  status: passed
+  run: 20260819T051528Z_gate6_spi_return_static_high_build
+  diamond: 3.14.0.75.2
+  drc_errors: 0
+  timing_errors: 0
+  source_sha256:
+    spi_return_static_high.v: 9dbf351932698a4917fd21e5e71fb0c3d914d030b9d7759d8e53e793b0d771d9
+    spi_return_static_high.lpf: 83b47abaf04e566670c1b797eca9fd163401cd69b2bc77aef269037e1dc1dbe6
+  bitstream_sha256: 2251c50ea67d5196dab20ede5fe24bfe2a76d20b99a9992183274ed508536f2d
+  bitstream_design_sha256: d485816277270f954024a709ec05ac8cd055e03a6ec244c28a15f7848ae3e6a0
+  bitstream_bytes: 16032
+  placed_io:
+    spi_to_bbb_d1: {pin: 31, buffer: LVCMOS33_OUT, drive_ma: 4, slew: SLOW}
+
+sram_program_candidate:
+  status: executed
+  approved: false
+  approved_by: user
+  approved_on: 2026-08-19
+  approval_scope: one volatile SRAM program to hold U2 pin 31 high for P9_18 return-path measurement
+  directory: QKD_PROJ/candidates/gate6-spi-return-static-high
+  bitstream: spi_return_static_high_impl1.bit
+  bitstream_sha256: 2251c50ea67d5196dab20ede5fe24bfe2a76d20b99a9992183274ed508536f2d
+  bitstream_design_sha256: d485816277270f954024a709ec05ac8cd055e03a6ec244c28a15f7848ae3e6a0
+  bitstream_bytes: 16032
+  source_sha256:
+    spi_return_static_high.v: 9dbf351932698a4917fd21e5e71fb0c3d914d030b9d7759d8e53e793b0d771d9
+    spi_return_static_high.lpf: 83b47abaf04e566670c1b797eca9fd163401cd69b2bc77aef269037e1dc1dbe6
+  companion_sha256:
+    spi_return_static_high_impl1.pad: 364f5c6a69c71af1a7ee352116813eabc1c7af80982c0d1dd17dbb70ae31fa77
+    build.log: d9a8fe1d3fe65ce324e53519c0eed8c8476fedc65166563f1813d90024c78e4d
+    manifest.json: 0bdbc65f79a65ceeebae5009b08adc9b8762ff47afa25173ae43f4c4577952b2
+  immutable: true
+  approval_max_executions: 1
+  approval_executions_used: 1
+  execution_run: 20260819T051703Z_gate6_spi_return_static_high_sram
+  execution_result: PASS_p9_18_static_high
+  observed_voltage_v: 3.3
+
+stop_conditions:
+  - Any pin other than U2 pin 31 is configured as a user output.
+  - U2 pin 31 is not a 3.3 V LVCMOS output with 4 mA slow slew.

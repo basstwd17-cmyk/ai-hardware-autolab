@@ -1,0 +1,128 @@
+{
+  "run": "gate1_build",
+  "started_at": "2026-08-14T05:02:25+00:00",
+  "updated_at": "2026-08-14T05:02:32+00:00",
+  "verdict": "PASS",
+  "contract": {
+    "test_id": "gate1-jtag-sram-gpio",
+    "status": "blocked_pending_human_review",
+    "board_map": "board-map.yaml",
+    "test_spec": "gate1-test-spec.yaml",
+    "allow_hardware": false,
+    "allowed_operations": [
+      "diamond_build",
+      "jtag_scan",
+      "oscilloscope_capture",
+      "power_off_continuity_check",
+      "readback_or_program_status",
+      "sram_fast_program"
+    ],
+    "forbidden_operations": [
+      "drive_any_D1B_or_D2B_bus",
+      "drive_pin_34_SPI_CLK",
+      "drive_pin_35_LDASC_A",
+      "enable_analog_output",
+      "nonvolatile_flash",
+      "power_board_without_current_limit"
+    ]
+  },
+  "pass_criteria": {
+    "consecutive_runs": 3,
+    "build_errors": 0,
+    "build_warnings_requiring_review": 0,
+    "expected_device_count": 1,
+    "expected_idcode": "0x012BC043",
+    "sram_program_success": true,
+    "waveform_frequency_tolerance_percent": 5,
+    "voltage_limit_violations": 0
+  },
+  "steps": [
+    {
+      "tool": "cpld",
+      "action": "build",
+      "ok": true,
+      "started_at": "2026-08-14T05:02:25+00:00",
+      "duration_s": 7.676,
+      "commands": [
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe create.tcl",
+        "C:\\lscc\\diamond\\3.14\\bin\\nt64\\pnmainc.exe run.tcl"
+      ],
+      "measurements": {
+        "project": "gate1_gpio_toggle",
+        "top": "gate1_gpio_toggle",
+        "device": "LCMXO2-4000HC-4TG144C",
+        "synthesis": "lse",
+        "source_sha256": {
+          "gate1_gpio_toggle.v": "80f744afedc6ef78ada9993b938cee5385fb3bde940d1e269f430f627e18dbf1",
+          "gate1_gpio_toggle.lpf": "b8a01e08cb23571d77e12c732ffcda64836ebbda531afb3dc58d96b8cff26924"
+        },
+        "active_lpf": "build/gate1_gpio_toggle.lpf",
+        "returncode": 0,
+        "create_returncode": 0,
+        "user_io": {
+          "dbg0": {
+            "pin": 117,
+            "bank": 0,
+            "buffer_type": "LVCMOS33_OUT",
+            "site": "PT24A",
+            "drive_ma": 4,
+            "slew": "SLOW"
+          }
+        },
+        "user_io_count": 1,
+        "bitstream_sha256": "47f7f1062cecfc0bdaa0811f549ed80b6771fef8c83b18a8d89ea28c08b4660c",
+        "bitstream_bytes": 16271,
+        "drc_report": "DRC detected 0 errors and 0 warnings.",
+        "drc_errors": 0,
+        "drc_warnings": 0
+      },
+      "verdict": "PASS",
+      "artifacts": [
+        {
+          "path": "build.log",
+          "kind": "build_log",
+          "sha256": "d1e860f96c291a13af027c6cead09c7d3f79c5a45affcd469defa010ee3f894f",
+          "size_bytes": 27442
+        },
+        {
+          "path": "gate1_gpio_toggle_impl1.bit",
+          "kind": "bitstream",
+          "sha256": "47f7f1062cecfc0bdaa0811f549ed80b6771fef8c83b18a8d89ea28c08b4660c",
+          "size_bytes": 16271
+        },
+        {
+          "path": "gate1_gpio_toggle_impl1.pad",
+          "kind": "pad_report",
+          "sha256": "edfa91fd3c7f972f6579ada50dbfb56b3c997bcb1c76c31c0d7ba17f17f68889",
+          "size_bytes": 35235
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "versions": {
+        "diamond_root": "C:\\lscc\\diamond\\3.14",
+        "diamond": "3.14.0.75.2"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build.log",
+      "kind": "build_log",
+      "sha256": "d1e860f96c291a13af027c6cead09c7d3f79c5a45affcd469defa010ee3f894f",
+      "size_bytes": 27442
+    },
+    {
+      "path": "gate1_gpio_toggle_impl1.bit",
+      "kind": "bitstream",
+      "sha256": "47f7f1062cecfc0bdaa0811f549ed80b6771fef8c83b18a8d89ea28c08b4660c",
+      "size_bytes": 16271
+    },
+    {
+      "path": "gate1_gpio_toggle_impl1.pad",
+      "kind": "pad_report",
+      "sha256": "edfa91fd3c7f972f6579ada50dbfb56b3c997bcb1c76c31c0d7ba17f17f68889",
+      "size_bytes": 35235
+    }
+  ]
+}

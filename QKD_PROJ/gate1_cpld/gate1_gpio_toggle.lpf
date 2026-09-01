@@ -1,0 +1,32 @@
+# Gate 1 constraints for RTASE_V1. One user I/O, nothing else.
+#
+# Anything added here must also be added to gate1-test-spec.yaml. build_cpld()
+# checks the pad report against the contract and fails the build if a port
+# appears that the contract does not name.
+
+BLOCK RESETPATHS;
+BLOCK ASYNCPATHS;
+
+# dbg0 -- CPLD pin 117, site PT24A, bank 0.
+#
+# DRIVE and SLEWRATE are stated explicitly. The previous build left them out
+# and Diamond defaulted to DRIVE:8mA, while gate1-test-spec.yaml calls for
+# 4 mA. Leaving a value to the tool default means the contract and the
+# bitstream disagree without anyone noticing.
+#
+# 4 mA also matters for the measurement: it is the figure behind the 1 Mohm
+# probe requirement in board-map.yaml.
+LOCATE COMP "dbg0" SITE "117";
+IOBUF PORT "dbg0" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;
+
+# Internal oscillator clock, stated rather than left to be inferred.
+#
+# Diamond does derive this from the OSCH NOM_FREQ attribute on its own, and the
+# first build met it with 0 timing errors. It is written out anyway so the
+# number the design is checked against is visible here instead of only in a
+# generated report. The net name comes from the PAR report:
+#   PRIMARY "osc_clk" from OSC on comp "internal_osc" on site "OSC"
+#
+# 2.08 MHz is the OSCH nominal. It is NOT a measured or guaranteed figure --
+# do not turn it into a scope pass criterion. See gate1-test-spec.yaml.
+FREQUENCY NET "osc_clk" 2.080000 MHz;

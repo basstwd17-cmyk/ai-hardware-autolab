@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rtase-hwtools": {
+      "type": "stdio",
+      "command": "py",
+      "args": ["-3", "QKD_PROJ/mcp_server/server.py"],
+      "env": {}
+    }
+  }
+}
