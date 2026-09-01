@@ -23,7 +23,8 @@
 Windows PowerShell에서 프런트엔드 소스를 바꾼 경우에만 먼저 빌드합니다.
 
 ```powershell
-cd C:\KIST\QKD_PROJ\webui\frontend
+$repoRoot = "C:\KIST\ai-hardware-autolab"
+Set-Location "$repoRoot\QKD_PROJ\webui\frontend"
 npm.cmd ci
 npm.cmd run build
 ```
@@ -31,7 +32,7 @@ npm.cmd run build
 터미널 1에서 데몬을 실행합니다.
 
 ```powershell
-cd C:\KIST
+Set-Location $repoRoot
 py -3 -m QKD_PROJ.orchestrator `
   --ledger QKD_PROJ\webui\state\web-jobs.db `
   --runs QKD_PROJ\runs `
@@ -47,7 +48,7 @@ py -3 -m QKD_PROJ.orchestrator `
 터미널 2에서 웹 서버를 실행하고 출력되는 전체 token URL을 엽니다.
 
 ```powershell
-cd C:\KIST
+Set-Location $repoRoot
 py -3 -m QKD_PROJ.webui.backend.app `
   --daemon "\\.\pipe\qkd-agent-web" `
   --static QKD_PROJ\webui\frontend\dist
@@ -74,4 +75,3 @@ Cloudflare relay를 새 환경에 배포할 때는 `QKD_PROJ/webui/cloudflare/wr
 ## 제3자 에셋
 
 Pixel Office 에셋의 원본, 고정 커밋, 파일별 SHA-256과 라이선스는 `QKD_PROJ/webui/assets/MANIFEST.json` 및 `LICENSE-pixel-agents`에 기록되어 있습니다. 자세한 내용은 `THIRD_PARTY_NOTICES.md`를 확인하십시오.
-
