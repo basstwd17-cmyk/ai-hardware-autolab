@@ -56,6 +56,20 @@ EFFECTS = (READ, MUTATE)
 _READ_ONLY_TOOLS = frozenset({"list_contracts", "read_contract", "list_runs", "read_run"})
 
 ROLE_TOOLS: dict[str, frozenset[str]] = {
+    "lead-agent": _READ_ONLY_TOOLS,
+    "builder": _READ_ONLY_TOOLS
+    | {
+        "build_cpld",
+        "run_board_build",
+        "scan_jtag",
+        "program_cpld_sram",
+        "deploy_pru",
+        "run_bbb",
+        "run_board_stage",
+        "measure_gate1_gpio",
+        "measure_board_scope",
+        "measure_scope",
+    },
     "mission-architect": _READ_ONLY_TOOLS,
     "change-analyst": _READ_ONLY_TOOLS,
     "architecture-selector": _READ_ONLY_TOOLS,
@@ -79,6 +93,8 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
 
 # Which script effects a role may run through `run_bbb`.
 ROLE_EFFECTS: dict[str, frozenset[str]] = {
+    "lead-agent": frozenset({READ}),
+    "builder": frozenset({READ, MUTATE}),
     "mission-architect": frozenset({READ}),
     "change-analyst": frozenset({READ}),
     "architecture-selector": frozenset({READ}),
@@ -104,13 +120,37 @@ class ServerPolicy:
     contracts_dir: Path = CONTRACTS_DIR
     runs_dir: Path = RUNS_DIR
     project_root: Path = PROJECT_ROOT
+    device_root: Path | None = None
     # None means the historical profile: every tool the `allow_hardware` flag
     # permits. A named role narrows that to one row of the matrix, and the two
     # locks compose -- a role that lists board tools still gets none of them
     # unless the flag was also given.
     role: str | None = None
+    hardware_tool: str | None = None
+    hardware_contract: str | None = None
+    hardware_contract_sha256: str | None = None
+    hardware_profile_path: Path | None = None
+    hardware_profile_sha256: str | None = None
+    workspace_recipe: str | None = None
+    workspace_recipe_sha256: str | None = None
+    scenario_workspace: Path | None = None
+    # Host-supplied operator declarations for this job, never model tool arguments.
+    scope_connections: tuple = ()
 
     def __post_init__(self) -> None:
+        binding = (self.hardware_tool, self.hardware_contract, self.hardware_contract_sha256)
+        if any(binding) and not all(binding):
+            raise ToolError("hardware turn binding needs tool, contract and digest together")
+        profile_binding = (self.hardware_profile_path, self.hardware_profile_sha256)
+        if any(profile_binding) and not all(profile_binding):
+            raise ToolError("hardware profile binding needs path and digest together")
+        if (self.workspace_recipe or self.workspace_recipe_sha256) and (
+            not self.workspace_recipe or not self.workspace_recipe_sha256 or not self.hardware_tool
+        ):
+            raise ToolError("workspace recipe requires a bound hardware turn and source digest")
+        if self.scenario_workspace is not None:
+            workspace = Path(self.scenario_workspace).resolve(strict=True)
+            object.__setattr__(self, "scenario_workspace", workspace)
         if self.role is not None and self.role not in ROLE_TOOLS:
             raise ToolError(
                 f"Unknown role {self.role!r}. Known roles: {', '.join(sorted(ROLE_TOOLS))}."
@@ -164,15 +204,39 @@ def _contract_path(policy: ServerPolicy, name: str) -> Path:
 
 def _gate(policy: ServerPolicy, contract: str):
     from QKD_PROJ.hwtools import Contracts, SafetyGate
+    from QKD_PROJ.hwtools.result import sha256_file
 
-    _contract_path(policy, contract)
+    if policy.hardware_profile_path is not None:
+        from QKD_PROJ.boards.hardware import HardwareProfile
+        from QKD_PROJ.hwtools.result import sha256_file
+        path = Path(policy.hardware_profile_path).resolve()
+        if sha256_file(path) != policy.hardware_profile_sha256:
+            raise ToolError("installed hardware profile changed after job intake")
+        profile = HardwareProfile.load(
+            policy.device_root or policy.project_root,
+            path.parent.parent.name,
+            path.parent.name,
+        )
+        if contract != profile.label:
+            raise ToolError("device call names a different hardware profile")
+        return profile.compatibility_gate(
+            scope_connections=policy.scope_connections,
+            delegated_operation="sram_fast_program" if policy.hardware_tool == "program_cpld_sram" else None
+        )
+    path = _contract_path(policy, contract)
+    delegated = None
+    if policy.allow_hardware and policy.hardware_tool == "program_cpld_sram":
+        if contract != policy.hardware_contract or sha256_file(path) != policy.hardware_contract_sha256:
+            raise ToolError("SRAM boundary differs from the authorized dispatch")
+        delegated = "sram_fast_program"
     return SafetyGate(
         Contracts.load(
             contract,
             contracts_dir=policy.contracts_dir,
-            project_root=policy.project_root,
+            project_root=policy.device_root or policy.project_root,
         ),
         allow_hardware=policy.allow_hardware,
+        delegated_operation=delegated,
     )
 
 
@@ -186,6 +250,7 @@ def _record(policy: ServerPolicy, gate, args: dict[str, Any], default: str):
 
 
 def _result_payload(record, result) -> dict[str, Any]:
+    result.measurements["execution_completed"] = bool(result.ok)
     verdict = record.finish(result.verdict)
     return {
         "run": record.dir.name,
@@ -207,11 +272,19 @@ def _clip(text: str) -> str:
 
 def _list_contracts(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     entries = []
+    include_unready = args.get("include_unready", False)
+    if type(include_unready) is not bool:
+        raise ToolError("include_unready must be a JSON boolean")
+    omitted = 0
     for path in sorted(policy.contracts_dir.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
             entries.append({"file": path.name, "error": f"unparsable: {exc}"})
+            continue
+        readiness = _contract_readiness(policy, path, data)
+        if readiness["issues"] and not include_unready:
+            omitted += 1
             continue
         entries.append(
             {
@@ -220,23 +293,51 @@ def _list_contracts(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any
                 "status": data.get("status"),
                 "allowed_operations": data.get("allowed_operations"),
                 "forbidden_operations": data.get("forbidden_operations"),
+                "reuse": readiness,
             }
         )
-    return {"contracts": entries, "policy": policy.describe()}
+    return {"contracts": entries, "policy": policy.describe(), "omitted_unready": omitted,
+            "note": "Listing is not approval or hardware verification. include_unready=true shows incomplete proposals for repair."}
+
+
+def _contract_readiness(policy, path, data):
+    """Cheap read-only structural check; actual source bytes are checked at dispatch preparation."""
+    issues = []
+    if isinstance(data, dict) and data.get("status") == "proposed_hardware_boundary":
+        from dataclasses import replace
+        from QKD_PROJ.hwtools.safety import Contracts, SafetyGate, READ_ONLY_OPERATIONS
+        from QKD_PROJ.orchestrator.boundary_normalization import normalize_boundary
+        try:
+            normalized = normalize_boundary(data)
+            bound = Contracts.load(path.name, policy.contracts_dir, project_root=policy.project_root)
+            gate = SafetyGate(replace(bound, test_spec=normalized), allow_hardware=True)
+            for operation in normalized.get("allowed_operations", []):
+                if operation not in READ_ONLY_OPERATIONS:
+                    gate.require(operation)
+            if "sram_fast_program" in normalized.get("allowed_operations", []):
+                if not isinstance(normalized.get("sram_program_candidate"), dict):
+                    issues.append("missing executable sram_program_candidate; reuse verified source metadata, not a path/hash-only draft")
+        except (OSError, RuntimeError, ValueError, yaml.YAMLError) as exc:
+            issues.append(str(exc))
+    return {"status": "needs_preparation" if issues else "not_flagged", "issues": issues}
 
 
 def _read_contract(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     path = _contract_path(policy, _string(args, "name"))
-    return {"file": path.name, "text": _clip(path.read_text(encoding="utf-8"))}
+    raw = path.read_text(encoding="utf-8")
+    return {"file": path.name, "text": _clip(raw),
+            "reuse": _contract_readiness(policy, path, yaml.safe_load(raw) or {})}
 
 
 def _list_runs(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     limit = int(args.get("limit") or 25)
+    query = _string(args, "query", required=False).casefold()
     if not policy.runs_dir.is_dir():
         return {"runs": [], "note": f"{policy.runs_dir} does not exist yet"}
     directories = sorted((p for p in policy.runs_dir.iterdir() if p.is_dir()), reverse=True)
+    matching = [p for p in directories if query in p.name.casefold()]
     runs = []
-    for directory in directories[: max(1, limit)]:
+    for directory in matching[: max(1, limit)]:
         status_path = directory / "run_status.json"
         verdict = None
         steps = None
@@ -248,22 +349,35 @@ def _list_runs(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
             except json.JSONDecodeError:
                 verdict = "unreadable run_status.json"
         runs.append({"run": directory.name, "verdict": verdict, "steps": steps})
-    return {"runs": runs, "total": len(directories)}
+    return {"runs": runs, "total": len(directories), "matched_total": len(matching)}
 
 
 def _read_run(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
+    from QKD_PROJ.hwtools.evidence_view import run_view
     name = _string(args, "run")
+    detail = args.get("detail", "summary")
+    if detail not in ("summary", "full"):
+        raise ToolError("detail must be summary or full")
     if not RUN_NAME.fullmatch(name):
         raise ToolError("run must be a plain run directory name")
     directory = policy.runs_dir / name
     if not directory.is_dir():
         raise ToolError(f"No such run: {name}")
-    payload: dict[str, Any] = {"run": name, "files": sorted(p.name for p in directory.iterdir())}
+    payload: dict[str, Any] = {"run": name, "files": sorted(p.name for p in directory.iterdir()),
+                               "detail": detail}
     for key, filename in (("status", "run_status.json"), ("manifest", "manifest.json")):
         path = directory / filename
         if path.is_file():
             try:
-                payload[key] = json.loads(_clip(path.read_text(encoding="utf-8")))
+                # Never clip JSON before parsing: a long valid manifest used to
+                # become an 'unparsable' error, provoking repeated shell reads.
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if detail == "summary" and isinstance(data, dict):
+                    data, omitted = run_view(data)
+                    payload["omitted" if key == "manifest" else "status_omitted"] = omitted
+                    payload["full_evidence"] = {"path": str(path), "read_run_detail": "full",
+                        "note": "A summary is not a complete command/per-round audit. Read full details for a specific discrepancy."}
+                payload[key] = data
             except json.JSONDecodeError as exc:
                 payload[key] = {"error": f"unparsable: {exc}"}
     return payload
@@ -373,7 +487,15 @@ def _bound_profile_stage(policy: ServerPolicy, args: dict[str, Any]):
     stage = next((item for item in profile.stages if item.stage_id == stage_id), None)
     if stage is None:
         raise ToolError(f"board profile has no stage {stage_id!r}")
-    if policy.role is not None and stage.agent != policy.role:
+    legacy_builder_roles = {
+        "design-builder", "firmware-builder", "board-operator", "measurement"
+    }
+    role_matches = (
+        policy.role is None
+        or stage.agent == policy.role
+        or (policy.role == "builder" and stage.agent in legacy_builder_roles)
+    )
+    if not role_matches:
         raise ToolError(
             f"stage {stage_id} belongs to agent {stage.agent!r}, not role {policy.role!r}"
         )
@@ -413,27 +535,72 @@ def _scan_jtag(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
 
     gate = _gate(policy, _string(args, "contract"))
     record = _record(policy, gate, args, "mcp_jtag_scan")
-    return _result_payload(record, scan_jtag(gate, record=record))
+    xcf = (gate.contracts.test_spec.get("jtag") or {}).get("scan_xcf")
+    kwargs = {"xcf_path": (policy.device_root or policy.project_root) / str(xcf)} if xcf else {}
+    return _result_payload(record, scan_jtag(gate, record=record, **kwargs))
 
 
 def _program_cpld_sram(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     from QKD_PROJ.hwtools import program_cpld_sram, scan_jtag
 
     gate = _gate(policy, _string(args, "contract"))
-    xcf_name = _string(args, "program_xcf")
-    if not re.fullmatch(r"^[A-Za-z0-9._-]+\.xcf$", xcf_name):
-        raise ToolError("program_xcf must be a plain .xcf file name in contracts/")
-    xcf = policy.contracts_dir / xcf_name
+    scan_kwargs: dict[str, Any] = {}
+    if policy.scenario_workspace is not None:
+        workspace = policy.scenario_workspace
+        xcf = (workspace / _string(args, "program_xcf")).resolve()
+        if not xcf.is_relative_to(workspace):
+            raise ToolError("program_xcf must stay inside the job workspace")
+        jtag = gate.contracts.test_spec.get("jtag") or {}
+        scan_xcf_value = jtag.get("scan_xcf")
+        if not isinstance(scan_xcf_value, str):
+            raise ToolError("hardware connection has no JTAG scan configuration")
+        device_root = (policy.device_root or policy.project_root).resolve()
+        scan_xcf = (device_root / scan_xcf_value).resolve()
+        if not scan_xcf.is_relative_to(device_root) or not scan_xcf.is_file():
+            raise ToolError("hardware JTAG scan configuration is missing or invalid")
+        scan_kwargs["xcf_path"] = scan_xcf
+    elif policy.hardware_profile_path is not None:
+        jtag = gate.contracts.test_spec.get("jtag") or {}
+        xcf_value = jtag.get("program_xcf")
+        scan_xcf_value = jtag.get("scan_xcf")
+        if not isinstance(xcf_value, str):
+            raise ToolError("hardware profile has no pinned SRAM program XCF")
+        if not isinstance(scan_xcf_value, str):
+            raise ToolError("hardware profile has no pinned JTAG scan XCF")
+        device_root = (policy.device_root or policy.project_root).resolve()
+        xcf = (device_root / xcf_value).resolve()
+        scan_xcf = (device_root / scan_xcf_value).resolve()
+        if not xcf.is_relative_to(device_root) or not scan_xcf.is_relative_to(device_root):
+            raise ToolError("hardware profile JTAG inputs escape the device root")
+        if not scan_xcf.is_file():
+            raise ToolError(f"No such scan XCF: {scan_xcf}")
+        scan_kwargs["xcf_path"] = scan_xcf
+    else:
+        xcf_name = _string(args, "program_xcf")
+        if not re.fullmatch(r"^[A-Za-z0-9._-]+\.xcf$", xcf_name):
+            raise ToolError("program_xcf must be a plain .xcf file name in contracts/")
+        xcf = policy.contracts_dir / xcf_name
     if not xcf.is_file():
-        raise ToolError(f"No such XCF: {xcf_name}")
+        raise ToolError(f"No such XCF: {xcf}")
+
+    # Local input defects must be found before the first JTAG scan as well as
+    # before the program command. This is the same check used before approval.
+    from QKD_PROJ.hwtools.sram import program_input_artifacts, workspace_program_input_artifacts
+    if policy.scenario_workspace is not None:
+        workspace_program_input_artifacts(gate, xcf, policy.scenario_workspace)
+    else:
+        program_input_artifacts(gate, xcf)
 
     record = _record(policy, gate, args, "mcp_sram_program")
     # The chain is verified in the same run that programs it. A scan from an
     # earlier session proves nothing about the cable that is attached now.
-    scan = scan_jtag(gate, record=record)
+    scan = scan_jtag(gate, record=record, **scan_kwargs)
     if not scan.ok:
         return _result_payload(record, scan)
-    result = program_cpld_sram(gate, scan, program_xcf=xcf, record=record)
+    program_kwargs = {"program_xcf": xcf, "record": record}
+    if policy.scenario_workspace is not None:
+        program_kwargs["workspace_root"] = policy.scenario_workspace
+    result = program_cpld_sram(gate, scan, **program_kwargs)
     payload = _result_payload(record, result)
     payload["scan"] = scan.to_dict()
     return payload
@@ -448,6 +615,53 @@ def _measure_gate1_gpio(policy: ServerPolicy, args: dict[str, Any]) -> dict[str,
         raise ToolError("params must be an object")
     record = _record(policy, gate, args, "mcp_gate1_gpio")
     result = measure_gate1_gpio(gate, record=record, params=params)
+    return _result_payload(record, result)
+
+
+def _measure_scope(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
+    from QKD_PROJ.hwtools.scope import measure_scope
+    from QKD_PROJ.hwtools.recipes.profile_channel_capture import profile_channel_capture
+    gate = _gate(policy, _string(args, "contract"))
+    if _identity_only(args):
+        if args.get("params") or policy.workspace_recipe:
+            raise ToolError("identity_only cannot include capture params or a workspace recipe")
+        from QKD_PROJ.hwtools.scope import identify_scope
+        record = _record(policy, gate, args, "mcp_scope_identify")
+        return _result_payload(record, identify_scope(gate, record))
+    boundary = gate.instrument_scope()
+    params = args.get("params")
+    if not isinstance(params, dict):
+        raise ToolError("params must describe the requested channel capture")
+    if not policy.workspace_recipe:
+        gate.require_scope_capture(params)
+    record = _record(policy, gate, args, "mcp_scope_capture")
+    from QKD_PROJ.hwtools.workspace_recipe import load_recipe, bounded_recipe, RecipeSources
+    from QKD_PROJ.hwtools.result import ToolResult, FAIL
+    recipe = profile_channel_capture
+    sources = RecipeSources(record)
+    if policy.workspace_recipe:
+        try:
+            recipe, content = load_recipe(policy.project_root, policy.workspace_recipe, str(policy.workspace_recipe_sha256),
+                                          source_sink=sources)
+            source = record.dir / "executed_recipe.py"
+            source.write_bytes(content)
+        except Exception as exc:
+            result = ToolResult(tool="scope", action="prepare_recipe", ok=False, verdict=FAIL, error=str(exc))
+            sources.attach(result)
+            record.add(result)
+            return _result_payload(record, result)
+    recipe = bounded_recipe(recipe, {row["channel"] for row in boundary["scope_channels"]})
+    result = measure_scope(recipe, params, gate, record)
+    if policy.scope_connections:
+        result.measurements["operator_scope_connections"] = list(policy.scope_connections)
+    if policy.workspace_recipe:
+        result.measurements["executed_entrypoint"] = policy.workspace_recipe
+        result.measurements["executed_source_sha256"] = policy.workspace_recipe_sha256
+        result.add_artifact(source, "executed-source", relative_to=record.dir)
+        sources.attach(result)
+        # measure_scope already recorded the result; update the manifest with
+        # source provenance in the same step, not a second measurement.
+        record.write()
     return _result_payload(record, result)
 
 
@@ -475,38 +689,104 @@ def script_effect(entry: Any) -> str:
     return declared if declared in EFFECTS else MUTATE
 
 
+def _identity_only(args: dict[str, Any]) -> bool:
+    value = args.get("identity_only", False)
+    if type(value) is not bool:
+        raise ToolError("identity_only must be a JSON boolean")
+    return value
+
+
 def _run_bbb(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     from QKD_PROJ.hwtools import run_bbb
 
     gate = _gate(policy, _string(args, "contract"))
+    _check_bbb_target(policy, gate)
+    if _identity_only(args):
+        if args.get("script") or policy.workspace_recipe:
+            raise ToolError("identity_only cannot include a script or workspace recipe")
+        from QKD_PROJ.hwtools.bbb import identify_bbb
+        record = _record(policy, gate, args, "mcp_bbb_identify")
+        return _result_payload(record, identify_bbb(gate, record))
     script = _string(args, "script")
 
-    allowlist = gate.contracts.test_spec.get("scripts")
-    entry = allowlist.get(script) if isinstance(allowlist, dict) else None
-    effect = script_effect(entry)
-    permitted = policy.allowed_effects()
-    if effect not in permitted:
-        raise ToolError(
-            f"Script '{script}' is classified '{effect}' and this server was launched as "
-            f"role '{policy.role}', which may run {sorted(permitted)} scripts only. "
-            + (
-                "The contract does not classify it, so it counts as 'mutate' until a person "
-                "reviews it and adds effect_class."
-                if not (isinstance(entry, dict) and entry.get("effect_class"))
-                else "Run it from a board-operator server, with the approval that needs."
+    source_path = None
+    if policy.scenario_workspace is not None:
+        source_path = (policy.scenario_workspace / script).resolve()
+        if not source_path.is_relative_to(policy.scenario_workspace):
+            raise ToolError("BBB script must stay inside the job workspace")
+        if not source_path.is_file():
+            raise ToolError(f"No such workspace script: {script}")
+    else:
+        allowlist = gate.contracts.test_spec.get("scripts")
+        entry = allowlist.get(script) if isinstance(allowlist, dict) else None
+        effect = script_effect(entry)
+        permitted = policy.allowed_effects()
+        if effect not in permitted:
+            raise ToolError(
+                f"Script '{script}' is classified '{effect}' and this server was launched as "
+                f"role '{policy.role}', which may run {sorted(permitted)} scripts only. "
+                + (
+                    "The contract does not classify it, so it counts as 'mutate' until a person "
+                    "reviews it and adds effect_class."
+                    if not (isinstance(entry, dict) and entry.get("effect_class"))
+                    else "Run it from a board-operator server, with the approval that needs."
+                )
             )
-        )
 
     record = _record(policy, gate, args, f"mcp_bbb_{re.sub(r'[^A-Za-z0-9_]+', '_', script)}")
-    return _result_payload(record, run_bbb(gate, script, record))
+    return _result_payload(record, run_bbb(
+        gate, script, record, repo_root=policy.project_root, source_path=source_path,
+    ))
 
 
 def _deploy_pru(policy: ServerPolicy, args: dict[str, Any]) -> dict[str, Any]:
     from QKD_PROJ.hwtools import deploy_pru
 
     gate = _gate(policy, _string(args, "contract"))
+    _check_bbb_target(policy, gate)
     record = _record(policy, gate, args, "mcp_deploy_pru")
-    return _result_payload(record, deploy_pru(gate, record))
+    return _result_payload(record, deploy_pru(gate, record, repo_root=policy.project_root))
+
+
+def _check_bbb_target(policy, gate):
+    """Credentials remain local; an environment change cannot choose a board."""
+    if not policy.hardware_contract:
+        return  # historical manually configured CLI; not an automatic Campaign
+    from QKD_PROJ.hwtools.ssh import SshError, SshTarget, bbb_endpoint
+    expected = (gate.contracts.test_spec.get("bbb") or {}).get("target")
+    if expected is None:
+        expected = bbb_endpoint(gate.contracts.board_map, env={})
+    try:
+        SshTarget.from_env(board_map=gate.contracts.board_map, expected=expected)
+    except SshError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+def _validate_scenario_inputs(policy, tool_name, args):
+    """Read-only input checks, before dispatch can contact any device."""
+    root = policy.scenario_workspace
+    gate = _gate(policy, str(policy.hardware_contract))
+    if tool_name == "run_bbb" and not _identity_only(args):
+        source = (root / _string(args, "script")).resolve()
+        if not source.is_relative_to(root) or not source.is_file():
+            raise ToolError("script must name an existing file inside this job workspace")
+    elif tool_name == "program_cpld_sram":
+        from QKD_PROJ.hwtools.sram import workspace_program_input_artifacts
+        xcf = (root / _string(args, "program_xcf")).resolve()
+        if not xcf.is_relative_to(root):
+            raise ToolError("program_xcf must stay inside this job workspace")
+        workspace_program_input_artifacts(gate, xcf, root)
+    elif tool_name == "measure_scope" and not _identity_only(args):
+        gate.require_scope_capture(args.get("params") or {})
+    elif tool_name == "deploy_pru":
+        from QKD_PROJ.hwtools.bbb import _plan_uploads
+        config = gate.contracts.test_spec.get("bbb") or {}
+        repo = (root / str(config.get("repo_root") or "")).resolve()
+        if not repo.is_relative_to(root) or not repo.is_dir():
+            raise ToolError("PRU sources must exist inside this job workspace")
+        uploads = _plan_uploads(config, repo, str(config.get("remote_root") or ""))
+        if any(not local.resolve().is_relative_to(root) for local, _ in uploads):
+            raise ToolError("PRU upload source escapes this job workspace")
 
 
 # -- schemas -----------------------------------------------------------------
@@ -540,11 +820,11 @@ def build_tools(policy: ServerPolicy) -> list[Tool]:
         Tool(
             name="list_contracts",
             description=(
-                "List every contract in contracts/ with its test_id, status and the "
-                "operations it allows or forbids. Start here: every other tool takes "
-                "a contract name."
+                "List reusable contract references and their operations. Incomplete generated "
+                "proposals are omitted by default; include_unready=true exposes them for repair. "
+                "A listed reference is not approval or proof of current hardware state."
             ),
-            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            input_schema={"type": "object", "properties": {"include_unready": {"type": "boolean"}}, "additionalProperties": False},
             handler=bind(_list_contracts),
         ),
         Tool(
@@ -562,21 +842,23 @@ def build_tools(policy: ServerPolicy) -> list[Tool]:
             name="list_runs",
             description=(
                 "List run directories newest first with their verdict and steps. "
-                "Runs are the evidence chain: every tool call writes one."
+                "Use query for a literal run-name fragment (e.g. spi) and a small limit first; "
+                "do not fetch a large recent list when an exact relevant run is already known."
             ),
             input_schema={
                 "type": "object",
-                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                               "query": {"type": "string", "description": "Case-insensitive literal run-name fragment"}},
                 "additionalProperties": False,
             },
             handler=bind(_list_runs),
         ),
         Tool(
             name="read_run",
-            description="Return run_status.json and manifest.json for one run directory.",
+            description="Read one run's results, errors and artifact hashes. Default summary marks shortened command/per-round lists; use detail=full for a specific evidence gap. Never remeasure just to obtain a report.",
             input_schema={
                 "type": "object",
-                "properties": {"run": {"type": "string"}},
+                "properties": {"run": {"type": "string"}, "detail": {"type": "string", "enum": ["summary", "full"], "default": "summary"}},
                 "required": ["run"],
                 "additionalProperties": False,
             },
@@ -631,6 +913,14 @@ def build_tools(policy: ServerPolicy) -> list[Tool]:
 
     tools.extend(
         [
+            Tool(
+                name="measure_scope",
+                description="Capture 1..4 passive scope inputs with params; or identity_only=true to query identity without channels, settings, waveform, screenshot or STOP. Identity requires scope_identify in the boundary. No DUT board profile required.",
+                input_schema=_schema({"contract": _CONTRACT_ARG, "params": {"type": "object"},
+                                      "identity_only": {"type": "boolean"}}, ["contract"]),
+                handler=bind(_measure_scope),
+                touches_hardware=True,
+            ),
             Tool(
                 name="scan_jtag",
                 description=(
@@ -690,19 +980,23 @@ def build_tools(policy: ServerPolicy) -> list[Tool]:
             Tool(
                 name="run_bbb",
                 description=(
-                    "Run one allowlisted diagnostic script on the BeagleBone Black over "
-                    "SSH and record stdout, stderr, exit code and the script hash. Only "
-                    "scripts listed in the contract, matched by content hash, will run."
+                    "Run one script on the BeagleBone Black over SSH and record stdout, "
+                    "stderr, exit code and the script hash. Conversation jobs may use a "
+                    "path inside their isolated workspace. Historical callers use the "
+                    "contract script list. "
+                    "Alternatively identity_only=true authenticates and reads BBB model/kernel once; "
+                    "no script/upload/GPIO and no script allowlist needed. Requires bbb_identify."
                 ),
                 input_schema=_schema(
                     {
                         "contract": _CONTRACT_ARG,
+                        "identity_only": {"type": "boolean"},
                         "script": {
                             "type": "string",
                             "description": "Allowlist key from the contract's scripts map",
                         },
                     },
-                    ["contract", "script"],
+                    ["contract"],
                 ),
                 handler=bind(_run_bbb),
                 touches_hardware=True,
@@ -735,7 +1029,75 @@ def build_tools(policy: ServerPolicy) -> list[Tool]:
     # The role filter is applied last, over both halves. A tool outside the
     # role's row is not registered, so no prompt can reach it -- the same lock
     # the --allow-hardware flag already provides, one notch finer.
-    return [t for t in tools if policy.permits_tool(t.name)]
+    selected = [t for t in tools if policy.permits_tool(t.name)]
+    if policy.hardware_tool is None:
+        return selected
+    # One already-authorized attempt. Enforce the actual MCP arguments here;
+    # runtime approval prompts do not necessarily include them or happen at all.
+    from dataclasses import replace
+    from QKD_PROJ.hwtools.result import sha256_file
+    remaining = [1]
+    from QKD_PROJ.orchestrator.execution_sources import SourceSnapshot, source_block
+    installed_sources = SourceSnapshot(policy.device_root or PROJECT_ROOT, policy.hardware_tool)
+    workspace_sources = SourceSnapshot(policy.project_root, policy.hardware_tool)
+
+    def guarded(tool):
+        def validate(args):
+            if args.get("contract") != policy.hardware_contract:
+                raise ToolError("device call names a different hardware boundary")
+            if policy.hardware_profile_path is not None:
+                if sha256_file(Path(policy.hardware_profile_path)) != policy.hardware_profile_sha256:
+                    raise ToolError("hardware profile changed after authorization")
+            else:
+                path = _contract_path(policy, str(policy.hardware_contract))
+                if sha256_file(path) != policy.hardware_contract_sha256:
+                    raise ToolError("hardware boundary changed after authorization")
+            # A malformed argument has not attempted a device effect. Return
+            # corrective feedback without consuming the authorized attempt.
+            schema = tool.input_schema
+            for key in schema.get("required", []):
+                if key not in args:
+                    raise ToolError(f"{tool.name} needs argument {key!r}; correct the call")
+            types = {"string": str, "object": dict, "array": list, "boolean": bool}
+            for key, value in args.items():
+                expected_type = types.get(schema.get("properties", {}).get(key, {}).get("type"))
+                if expected_type is not None and not isinstance(value, expected_type):
+                    raise ToolError(f"{tool.name} argument {key!r} has the wrong type; correct the call")
+            if tool.name in {"run_bbb", "deploy_pru"}:
+                _check_bbb_target(policy, _gate(policy, str(policy.hardware_contract)))
+            if tool.name in {"run_bbb", "measure_scope"}:
+                identity = _identity_only(args)
+                other = "script" if tool.name == "run_bbb" else "params"
+                if identity and (args.get(other) or policy.workspace_recipe):
+                    raise ToolError("identity_only cannot include executable/capture configuration")
+                if not identity and other not in args:
+                    raise ToolError(f"{tool.name} needs {other} unless identity_only=true; correct the call")
+        def dispatch(args):
+            if policy.scenario_workspace is not None:
+                from .protocol import DevicePreparationError
+                try:
+                    validate(args)
+                    _validate_scenario_inputs(policy, tool.name, args)
+                except Exception as exc:
+                    raise DevicePreparationError(str(exc)) from exc
+            else:
+                validate(args)
+            if remaining[0] <= 0:
+                raise ToolError("authorized device attempt already consumed; report the result before another step")
+            changes = installed_sources.changes(tool.name) + workspace_sources.changes(tool.name)
+            if changes:
+                return {**source_block(changes, policy.project_root), 'blocked_tool': tool.name}
+            remaining[0] -= 1
+            return tool.handler(args)
+        def invoke(args):
+            if policy.workspace_recipe and tool.name != "measure_scope":
+                from QKD_PROJ.hwtools.workspace_recipe import execute_device_recipe
+                return execute_device_recipe(policy, args, dispatch, validate=validate)
+            return dispatch(args)
+        return invoke
+
+    return [replace(t, handler=guarded(t)) if t.touches_hardware else t
+            for t in selected if not t.touches_hardware or t.name == policy.hardware_tool]
 
 
 # -- prompts and resources ---------------------------------------------------

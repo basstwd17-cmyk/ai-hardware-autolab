@@ -51,6 +51,12 @@ class KnowledgeEvent:
 
 SCHEMA = (
     """
+    CREATE TABLE IF NOT EXISTS knowledge_ingestion_cursors (
+        source TEXT PRIMARY KEY,
+        event_id INTEGER NOT NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS knowledge_schema_info (
         version INTEGER NOT NULL
     )
@@ -174,6 +180,23 @@ class KnowledgeStore:
                     """
                 )
                 self._fts = False
+
+    def ingestion_cursor(self, source: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT event_id FROM knowledge_ingestion_cursors WHERE source = ?", (source,)
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def advance_ingestion(self, source: str, event_id: int) -> None:
+        # Advance only after all claims are durable. A crash between record and
+        # this write replays identical versions through record()'s unique key.
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO knowledge_ingestion_cursors VALUES (?, ?) "
+                "ON CONFLICT(source) DO UPDATE SET event_id = MAX(event_id, excluded.event_id)",
+                (source, event_id),
+            )
 
     def record(self, claim: KnowledgeClaim) -> KnowledgeEvent:
         """Append one reduction and update the current projection atomically.
@@ -328,17 +351,28 @@ class KnowledgeStore:
                     [query, *statuses, *parameters, limit],
                 ).fetchall()
             else:
-                like = f"%{text}%"
+                # Match query terms, not the entire scenario sentence. Escape
+                # LIKE metacharacters so identifiers are not wildcard searches.
+                tokens = re.findall(r"[\w.-]+", text, flags=re.UNICODE)[:32]
+                if not tokens:
+                    return []
+                clauses, patterns = [], []
+                for token in tokens:
+                    like = '%' + token.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+                    clauses.append("(f.statement LIKE ? ESCAPE '\\' OR f.subject LIKE ? ESCAPE '\\' "
+                                   "OR f.object_text LIKE ? ESCAPE '\\' OR f.tags LIKE ? ESCAPE '\\')")
+                    patterns.extend([like] * 4)
+                lexical = ' OR '.join(clauses)
                 rows = connection.execute(
                     f"""
                     SELECT c.status, c.payload
                     FROM knowledge_fts_fallback f
                     JOIN knowledge_claims c ON c.claim_id=f.claim_id
-                    WHERE (f.statement LIKE ? OR f.subject LIKE ? OR f.object_text LIKE ? OR f.tags LIKE ?)
+                    WHERE ({lexical})
                       AND c.status IN ({marks}) AND {where}
                     ORDER BY c.updated_at DESC LIMIT ?
                     """,
-                    [like, like, like, like, *statuses, *parameters, limit],
+                    [*patterns, *statuses, *parameters, limit],
                 ).fetchall()
         return [_projected_claim(row) for row in rows]
 

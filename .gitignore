@@ -66,3 +66,14 @@ QKD_PROJ/references/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Researcher project connections and new local runtime stores
+.env
+.env.*
+!.env.example
+QKD_PROJ/webui/state/
+QKD_PROJ/workspaces/
+QKD_PROJ/runs/
+QKD_PROJ/.test*/
+QKD_PROJ/.pytest*/
+QKD_PROJ/boards/local/

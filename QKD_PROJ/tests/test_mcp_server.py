@@ -81,7 +81,7 @@ def test_ping(offline) -> None:
 HARDWARE_TOOLS = {
     "scan_jtag", "program_cpld_sram", "measure_gate1_gpio", "run_bbb",
     "deploy_pru", "run_board_stage",
-    "measure_board_scope",
+    "measure_board_scope", "measure_scope",
 }
 
 

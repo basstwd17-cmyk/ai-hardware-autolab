@@ -22,3 +22,17 @@ CREATE TABLE IF NOT EXISTS snapshots (
   cursor     INTEGER NOT NULL DEFAULT 0 CHECK (cursor >= 0),
   updated_at INTEGER NOT NULL
 );
+
+-- Read-only replica of the local knowledge event log, isolated by device.
+CREATE TABLE IF NOT EXISTS knowledge_events (
+  device_id TEXT NOT NULL,
+  event_id INTEGER NOT NULL,
+  payload TEXT NOT NULL,
+  PRIMARY KEY (device_id, event_id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_sync (
+  device_id TEXT PRIMARY KEY,
+  cursor INTEGER NOT NULL DEFAULT 0,
+  latest INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);

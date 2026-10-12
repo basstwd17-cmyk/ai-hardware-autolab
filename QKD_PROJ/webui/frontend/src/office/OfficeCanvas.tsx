@@ -13,6 +13,7 @@ import {
   VOID_TILE,
   defaultOfficeSeats,
   furnitureAsset,
+  furnitureDepth,
   layoutAssetUrls,
   layoutBounds,
   parseOfficeLayout,
@@ -20,7 +21,16 @@ import {
   type LayoutBounds,
   type OfficeLayout,
 } from './layout'
-import { buildScene, frameAt, type PlacedCharacter, type Scene } from './scene'
+import {
+  buildScene,
+  characterDepth,
+  frameAt,
+  layoutLabelBoxes,
+  motionAt,
+  type CharacterMotion,
+  type PlacedCharacter,
+  type Scene,
+} from './scene'
 import {
   CHAR_COUNT,
   FLOOR_TILE_SIZE,
@@ -28,6 +38,8 @@ import {
   characterUrl,
   frameRect,
 } from './sprites'
+import { shortTeamLabel, teamDisplayName } from '../app/agentTeams'
+import { buildNavigation, OfficeWalkers } from './navigation'
 
 const SCALE = 2
 
@@ -88,6 +100,7 @@ function useImages(urls: string[]) {
 
 export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) {
   const canvas = useRef<HTMLCanvasElement | null>(null)
+  const animationOrigin = useRef(performance.now())
   const [hovered, setHovered] = useState<PlacedCharacter | null>(null)
   const { layout, error } = useOfficeLayout()
   const bounds = useMemo(() => (layout ? layoutBounds(layout) : fallbackBounds()), [layout])
@@ -101,6 +114,8 @@ export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) 
     [layout],
   )
   const images = useImages(urls)
+  const walkers = useMemo(() => layout ? new OfficeWalkers(buildNavigation(layout, bounds)) : null, [layout, bounds])
+  const paintedMotions = useRef(new Map<string, CharacterMotion>())
 
   useEffect(() => {
     const surface = canvas.current
@@ -108,14 +123,16 @@ export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) 
     const context = surface.getContext('2d')
     if (!context) return
     let frame = 0
-    const started = performance.now()
+    const started = animationOrigin.current
     const paint = (now: number) => {
-      draw(context, surface, layout, bounds, scene, images, now - started)
+      const motions = walkers?.sample(scene.characters, now) ?? new Map<string, CharacterMotion>()
+      paintedMotions.current = motions
+      draw(context, surface, layout, bounds, scene, images, now - started, motions)
       frame = requestAnimationFrame(paint)
     }
     frame = requestAnimationFrame(paint)
     return () => cancelAnimationFrame(frame)
-  }, [layout, bounds, scene, images])
+  }, [layout, bounds, scene, images, walkers])
 
   const pick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const surface = canvas.current
@@ -123,15 +140,16 @@ export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) 
     const box = surface.getBoundingClientRect()
     const x = ((event.clientX - box.left) / box.width) * bounds.width
     const y = ((event.clientY - box.top) / box.height) * bounds.height
-    setHovered(
-      scene.characters.find(
-        (character) =>
-          x >= character.x - 8 &&
-          x <= character.x + character.width + 8 &&
-          y >= character.y - 4 &&
-          y <= character.y + character.height + 10,
-      ) ?? null,
-    )
+    const elapsedMs = performance.now() - animationOrigin.current
+    setHovered(scene.characters.find((character) => {
+      const motion = paintedMotions.current.get(character.id) ?? motionAt(character, elapsedMs)
+      return (
+        x >= motion.x - 8 &&
+        x <= motion.x + character.width + 8 &&
+        y >= motion.y - 4 &&
+        y <= motion.y + character.height + 10
+      )
+    }) ?? null)
   }
 
   return (
@@ -156,7 +174,7 @@ export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) 
       )}
       {hovered && (
         <div className="office-tip">
-          <b className="who" data-agent={hovered.agent}>{hovered.agent}</b>
+          <b className="who" data-agent={hovered.agent}>{teamDisplayName(hovered.agent)}</b>
           <span>{hovered.activity}</span>
           {hovered.detail && <span className="muted">{hovered.detail}</span>}
           <span className="muted mono">{hovered.jobId}</span>
@@ -169,7 +187,13 @@ export function OfficeCanvas({ snapshot }: { snapshot: OfficeSnapshot | null }) 
 
 type Drawable =
   | { kind: 'furniture'; z: number; order: number; item: OfficeLayout['furniture'][number] }
-  | { kind: 'character'; z: number; order: number; character: PlacedCharacter }
+  | {
+      kind: 'character'
+      z: number
+      order: number
+      character: PlacedCharacter
+      motion: CharacterMotion
+    }
 
 function draw(
   context: CanvasRenderingContext2D,
@@ -179,6 +203,7 @@ function draw(
   scene: Scene,
   images: Record<string, HTMLImageElement>,
   elapsedMs: number,
+  motions: Map<string, CharacterMotion>,
 ): void {
   context.imageSmoothingEnabled = false
   context.fillStyle = '#0a0d12'
@@ -190,11 +215,17 @@ function draw(
   layout.furniture.forEach((item, order) => {
     const asset = furnitureAsset(item.type)
     const image = asset ? images[asset.url] : undefined
-    const localY = (item.row - bounds.minRow) * FLOOR_TILE_SIZE
-    drawables.push({ kind: 'furniture', z: localY + (image?.naturalHeight ?? 32), order, item })
+    drawables.push({ kind: 'furniture', z: furnitureDepth(item, bounds, image?.naturalHeight ?? 32), order, item })
   })
   scene.characters.forEach((character, order) => {
-    drawables.push({ kind: 'character', z: character.y + character.height, order, character })
+    const motion = motions.get(character.id) ?? motionAt(character, elapsedMs)
+    drawables.push({
+      kind: 'character',
+      z: characterDepth(character, motion),
+      order,
+      character,
+      motion,
+    })
   })
   drawables.sort(
     (a, b) =>
@@ -203,9 +234,9 @@ function draw(
   )
   for (const drawable of drawables) {
     if (drawable.kind === 'furniture') drawFurniture(context, drawable.item, bounds, images)
-    else drawCharacter(context, drawable.character, images, elapsedMs)
+    else drawCharacter(context, drawable.character, drawable.motion, images, elapsedMs)
   }
-  for (const character of scene.characters) drawLabel(context, character)
+  drawLabels(context, surface, scene.characters, elapsedMs, motions)
 }
 
 function drawTiles(
@@ -255,33 +286,84 @@ function drawFurniture(
 function drawCharacter(
   context: CanvasRenderingContext2D,
   character: PlacedCharacter,
+  motion: CharacterMotion,
   images: Record<string, HTMLImageElement>,
   elapsedMs: number,
 ): void {
   const sheet = images[characterUrl(character.character)]
   if (!sheet) return
-  const frames = POSE_FRAMES[character.pose]
-  const frame = frameAt(character.pose, elapsedMs, frames)
-  const { sx, sy, sw, sh } = frameRect('down', frame)
-  const x = character.x * SCALE
-  const y = character.y * SCALE
+  const frames = POSE_FRAMES[motion.pose]
+  const frame = frameAt(motion.pose, elapsedMs, frames)
+  const { sx, sy, sw, sh, flip } = frameRect(motion.direction, frame)
+  const x = motion.x * SCALE
+  const y = motion.y * SCALE
   context.fillStyle = 'rgba(0,0,0,0.28)'
   context.beginPath()
   context.ellipse(x + (sw * SCALE) / 2, y + sh * SCALE - 2, sw * SCALE * 0.4, 4, 0, 0, Math.PI * 2)
   context.fill()
-  context.drawImage(sheet, sx, sy, sw, sh, x, y, sw * SCALE, sh * SCALE)
+  if (flip) {
+    context.save()
+    context.translate(x + sw * SCALE, y)
+    context.scale(-1, 1)
+    context.drawImage(sheet, sx, sy, sw, sh, 0, 0, sw * SCALE, sh * SCALE)
+    context.restore()
+  } else {
+    context.drawImage(sheet, sx, sy, sw, sh, x, y, sw * SCALE, sh * SCALE)
+  }
+  context.fillStyle = activityColor(character.activity)
+  context.fillRect(x + sw * SCALE - 7, y + 3, 5, 5)
 }
 
-function drawLabel(context: CanvasRenderingContext2D, character: PlacedCharacter): void {
-  const centre = (character.x + character.width / 2) * SCALE
-  const y = Math.max(11, character.y * SCALE - 5)
-  context.font = '10px ui-monospace, monospace'
+function drawLabels(
+  context: CanvasRenderingContext2D,
+  surface: HTMLCanvasElement,
+  characters: PlacedCharacter[],
+  elapsedMs: number,
+  motions: Map<string, CharacterMotion>,
+): void {
+  context.font = 'bold 8px ui-monospace, monospace'
   context.textAlign = 'center'
-  const width = Math.ceil(context.measureText(character.agent).width) + 8
-  context.fillStyle = 'rgba(7,10,14,0.84)'
-  context.fillRect(Math.round(centre - width / 2), y - 10, width, 13)
-  context.fillStyle = '#f2f4f8'
-  context.fillText(character.agent, centre, y)
+  const labels = characters.map((character) => {
+    const motion = motions.get(character.id) ?? motionAt(character, elapsedMs)
+    const text = shortTeamLabel(character.agent)
+    return {
+      character,
+      motion,
+      text,
+      id: character.id,
+      anchorX: (motion.x + character.width / 2) * SCALE,
+      anchorY: motion.y * SCALE,
+      width: Math.ceil(context.measureText(text).width) + 10,
+      height: 12,
+    }
+  })
+  const boxes = layoutLabelBoxes(labels, surface.width, surface.height)
+  for (const [index, box] of boxes.entries()) {
+    const source = labels[index]
+    const boxCentre = box.x + box.width / 2
+    const boxBottom = box.y + box.height
+    if (Math.abs(boxCentre - box.anchorX) > 2 || Math.abs(boxBottom - box.anchorY) > 10) {
+      context.strokeStyle = 'rgba(242,244,248,0.48)'
+      context.lineWidth = 1
+      context.beginPath()
+      context.moveTo(Math.round(boxCentre), Math.round(boxBottom))
+      context.lineTo(Math.round(box.anchorX), Math.round(box.anchorY - 2))
+      context.stroke()
+    }
+    context.fillStyle = 'rgba(7,10,14,0.86)'
+    context.fillRect(box.x, box.y, box.width, box.height)
+    context.fillStyle = activityColor(source.character.activity)
+    context.fillRect(box.x, box.y, 2, box.height)
+    context.fillStyle = '#f2f4f8'
+    context.fillText(source.text, boxCentre, box.y + 9)
+  }
+}
+
+function activityColor(activity: string): string {
+  if (activity === 'running' || activity === 'typing') return '#47d7a1'
+  if (activity === 'waiting') return '#f6c453'
+  if (activity === 'reading' || activity === 'delegating') return '#6db6ff'
+  return '#8895a7'
 }
 
 function fallbackBounds(): LayoutBounds {

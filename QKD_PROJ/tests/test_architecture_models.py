@@ -135,6 +135,48 @@ def test_selected_architecture_cannot_hide_an_open_research_question():
         ArchitectureDecision.parse(decision, plan=plan, packet=packet)
 
 
+def test_stalled_research_can_only_produce_an_offline_draft_with_explicit_unknowns():
+    plan = ResearchPlan.parse(plan_data())
+    open_packet = packet_data()
+    # A partial fact is useful for offline preparation, but the question still
+    # needs a later bench or authority check.
+    open_packet["open_questions"] = ["timing-source"]
+    packet = SourcePacket.parse(open_packet, plan=plan)
+    constrained = decision_data()
+    constrained["status"] = "selected_with_constraints"
+    constrained["open_questions"] = ["timing-source"]
+    decision = ArchitectureDecision.parse(constrained, plan=plan, packet=packet)
+
+    draft = draft_data()
+    draft["constraints"].append(
+        "unresolved:timing-source: confirm the exact threshold before hardware execution"
+    )
+    parsed = ContractDraft.parse(draft, decision=decision, packet=packet)
+    assert parsed.execution_mode == "offline"
+
+    missing = copy.deepcopy(draft)
+    missing["constraints"] = ["No hardware access."]
+    with pytest.raises(ResearchValidationError, match="unresolved:<question-id>"):
+        ContractDraft.parse(missing, decision=decision, packet=packet)
+
+    hardware = copy.deepcopy(draft)
+    hardware["execution_mode"] = "hardware"
+    with pytest.raises(ResearchValidationError, match="only produce an offline draft"):
+        ContractDraft.parse(hardware, decision=decision, packet=packet)
+
+
+def test_constrained_architecture_preserves_every_open_question():
+    plan = ResearchPlan.parse(plan_data())
+    open_packet = packet_data()
+    open_packet["open_questions"] = ["timing-source"]
+    packet = SourcePacket.parse(open_packet, plan=plan)
+    constrained = decision_data()
+    constrained["status"] = "selected_with_constraints"
+
+    with pytest.raises(ResearchValidationError, match="preserve every open"):
+        ArchitectureDecision.parse(constrained, plan=plan, packet=packet)
+
+
 def test_offline_draft_cannot_smuggle_in_a_hardware_step():
     plan = ResearchPlan.parse(plan_data())
     packet = SourcePacket.parse(packet_data(), plan=plan)

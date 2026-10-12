@@ -29,15 +29,58 @@ from typing import Any, Iterable, Mapping, Protocol
 
 REDACTED = "***BB_PW***"
 
-# No default host. bb.py defaults to 192.168.0.4, provision.py to
-# beagle.local and provision_rtase.py to 192.168.50.2 -- three different
-# boards. A tool that picks one of those on its own can reboot hardware
-# somebody else is using, so this layer refuses instead of guessing.
-REQUIRED_ENV = ("BB_HOST", "BB_USER", "BB_PW")
+# No global/default board. The selected board map supplies reusable connection
+# facts; explicit session environment may override them. Passwords stay local.
 
 
 class SshError(RuntimeError):
     pass
+
+
+def bbb_endpoint(
+    board_map: Mapping[str, Any] | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Secret-free identity shared by submission, approval and execution.
+
+    Unknown/invalid fields stay None so preflight can ask a question without
+    contacting anything. Never search old scripts or other boards for defaults.
+    """
+    source = os.environ if env is None else env
+    bbb = (board_map or {}).get("bbb") or {}
+    access = (bbb.get("access") or {}) if isinstance(bbb, Mapping) else {}
+    if not isinstance(access, Mapping):
+        access = {}
+
+    def text(name: str, key: str) -> str | None:
+        value = source.get(name) or access.get(key)
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        return value if value and value.upper() not in {"UNVERIFIED", "UNKNOWN", "TBD"} else None
+
+    raw_port = source.get("BB_PORT") or access.get("port")
+    if raw_port is None:
+        raw_port = 22
+    try:
+        port = int(raw_port) if type(raw_port) in (str, int) else None
+    except ValueError:
+        port = None
+    if port is not None and not 1 <= port <= 65535:
+        port = None
+    return {"host": text("BB_HOST", "host"), "user": text("BB_USER", "user"), "port": port}
+
+
+def validate_bbb_endpoint(endpoint: Mapping[str, Any], expected: Mapping[str, Any] | None = None) -> None:
+    missing = ["BB_" + key.upper() for key in ("host", "user", "port") if endpoint.get(key) is None]
+    if missing:
+        raise SshError("Missing or invalid BBB connection: " + ", ".join(missing)
+                       + ". Configure the selected board's bbb.access or the session environment.")
+    if expected is not None and (
+        not isinstance(expected, Mapping)
+        or any(expected.get(key) != endpoint[key] for key in ("host", "user", "port"))
+    ):
+        raise SshError("BBB connection differs from approved bbb.target host/user/port; no device contacted")
 
 
 @dataclass(frozen=True)
@@ -48,26 +91,34 @@ class SshTarget:
     port: int = 22
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str] | None = None) -> "SshTarget":
+    def from_env(
+        cls, env: Mapping[str, str] | None = None, *,
+        board_map: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> "SshTarget":
         source = os.environ if env is None else env
-        missing = [name for name in REQUIRED_ENV if not (source.get(name) or "").strip()]
-        if missing:
+        endpoint = bbb_endpoint(board_map, source)
+        validate_bbb_endpoint(endpoint, expected)
+        password = source.get("BB_PW") or ""
+        # Explicit env mappings are hermetic (tests/embedding). Only the real
+        # local execution environment may use the current user's OS store.
+        if not password.strip() and env is None:
+            from .local_credentials import CredentialError, read_password
+
+            try:
+                password = read_password(endpoint) or ""
+            except CredentialError as exc:
+                raise SshError(str(exc)) from None
+        if not password.strip():
             raise SshError(
-                "Missing BBB connection environment: "
-                + ", ".join(missing)
-                + ". Set them for the board this session is allowed to touch; "
-                "there is no default host."
+                "BBB endpoint is configured, but local authentication BB_PW or a saved Windows credential is missing. "
+                "Configure credentials for the device-tool process; never send the password to an agent or store it in a contract."
             )
-        port_text = (source.get("BB_PORT") or "22").strip()
-        try:
-            port = int(port_text)
-        except ValueError as exc:
-            raise SshError(f"BB_PORT is not a number: {port_text!r}") from exc
         return cls(
-            host=source["BB_HOST"].strip(),
-            user=source["BB_USER"].strip(),
-            password=source["BB_PW"],
-            port=port,
+            host=endpoint["host"],
+            user=endpoint["user"],
+            password=password,
+            port=endpoint["port"],
         )
 
     def describe(self) -> dict[str, Any]:

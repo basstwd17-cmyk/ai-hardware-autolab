@@ -38,12 +38,13 @@ export type Direction = (typeof DIRECTION_ROWS)[number] | 'left'
  * is stated rather than papered over: the label under each character carries
  * the exact activity, so nothing the projection said is lost in the drawing.
  */
-export type Pose = 'standing' | 'typing' | 'reading'
+export type Pose = 'standing' | 'walking' | 'typing' | 'reading'
 
 /** Frame indices per pose, straight from `spriteData.ts`. */
 export const POSE_FRAMES: Record<Pose, number[]> = {
   // The walk cycle's first frame, held. A character at a desk is not walking.
   standing: [0],
+  walking: [0, 1, 2, 1],
   typing: [3, 4],
   reading: [5, 6],
 }

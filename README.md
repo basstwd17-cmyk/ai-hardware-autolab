@@ -1,77 +1,126 @@
 # AI Hardware Autolab
 
-로컬 Codex 런타임, 결정론적 계약/증거 판정, SQLite 작업 원장, 하드웨어 승인 경계와 웹 UI를 묶은 개인용 하드웨어 개발 오케스트레이션 플랫폼입니다.
+자기 프로젝트의 소스 폴더를 연결하고 시나리오를 입력하면 **Lead → Builder → Verifier**가 조사·설계·구현·검증을 이어가는 개발 플랫폼입니다. 웹 화면에서 역할별 진행 상황과 결과를 확인하고, 축적된 개발 지식을 지식맵에서 탐색합니다.
 
-시나리오를 받으면 기존 지식과 계약을 조회하고, 필요한 조사·설계·빌드·시뮬레이션·측정 단계를 계획합니다. 각 단계의 상태는 에이전트 메모리가 아니라 append-only 원장에 남으며, 하드웨어 접촉은 서명된 campaign 범위와 아티팩트 해시를 사용 시점에 다시 확인합니다.
+웹 서비스, 데이터 분석, 연구용 소프트웨어와 하드웨어 개발에 같은 흐름을 사용합니다. 보드·계측기는 필요한 작업에서만 설정합니다. 신규 작업에 실행 계약, Campaign 생성·승인 또는 Docker/WSL 설치가 필요하지 않습니다.
+
+## 현재 제공하는 기능
+
+- **프로젝트 연결:** 데몬 PC의 Git 소스 폴더, 목적·참고 자료, 빌드·검증 방법을 등록하고 작업별로 선택합니다.
+- **3개 역할:** Lead가 조사·설계, Builder가 구현·실행, Verifier가 요청과 실제 결과를 비교합니다. 부족하면 같은 작업에서 수정합니다.
+- **모델 선택:** 공통 모델과 역할별 모델·추론 강도를 선택합니다. 현재는 로컬 Codex CLI가 제공하는 모델을 지원합니다.
+- **작업공간:** 대상 프로젝트의 현재 소스를 별도 Git 작업공간에 복사합니다. 원본 브랜치와 소스는 자동으로 덮어쓰지 않습니다.
+- **지식맵:** 프로젝트/주제별 가지, 전체 별자리 보기, 본문 검색과 구체적인 기록 상세를 제공합니다.
+- **자동 적재:** 역할 결과의 개발 메모, 참고 문서, 구현 파일·해시와 장비 반환 기록을 저장합니다. 재시작 후 놓친 기록을 따라잡습니다.
+- **선택적 장비 도구:** 보드 등록·USB/COM 탐색·시리얼 통신과 지원된 장비의 호출을 제공합니다. RTASE/BBB/PRU는 활용 예제입니다.
+
+## 빠른 시작 — 다른 연구원의 프로젝트
+
+필수 환경: Windows, Git, Python 3.11 이상, Node.js 20 이상/npm, 로그인된 Codex CLI. 일반 개발에 BBB/PRU, Lattice 툴체인, Docker 또는 WSL은 필요하지 않습니다. 모델 사용량은 본인의 Codex 계정에 적용됩니다.
+
+### 1. 설치
+
+~~~powershell
+git clone https://github.com/basstwd17-cmyk/ai-hardware-autolab.git
+cd ai-hardware-autolab
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r QKD_PROJ\requirements.txt
+
+cd QKD_PROJ\webui\frontend
+npm.cmd ci
+npm.cmd run build
+cd ..\..\..
+~~~
+
+### 2. 개발할 프로젝트 준비
+
+기존 소스 폴더를 그대로 사용합니다. Git 저장소의 최상위 폴더와 첫 커밋이 필요합니다. 소스가 없다면 새 프로젝트 폴더를 만들고 README 등 필요한 파일을 첫 커밋으로 저장하세요. 토큰·실험 원본·대용량 산출물은 대상 프로젝트의 .gitignore에 지정합니다.
+
+플랫폼을 설치한 폴더와 개발 대상은 별개입니다. 예를 들어 플랫폼은 C:/Tools/ai-hardware-autolab, 개발 소스는 C:/Research/my-analysis에 둘 수 있습니다.
+
+### 3. 실행 — PowerShell 창 두 개
+
+두 창 모두 플랫폼 저장소 루트에서 시작합니다.
+
+~~~powershell
+# 창 1: 개발 대상 프로젝트를 연결한 데몬
+.\scripts\run-platform.ps1 -Component daemon -ProjectRoot 'C:\Research\my-analysis'
+
+# 창 2: 로컬 웹 화면
+.\scripts\run-platform.ps1 -Component web
+~~~
+
+웹 서버가 출력한 **전체 세션 URL**을 엽니다. 이 실행기는 일반 개발(offline)을 기본으로 사용합니다. Offline은 모델을 끄는 모드가 아니라 물리 장비 접근을 끄는 모드입니다. 동일 원장/파이프에 데몬을 중복 실행하지 마세요.
+
+### 4. 화면에서 개발 시작
+
+1. Start → 내 프로젝트 연결에서 이름, 데몬 PC 기준 소스 경로와 개발 안내를 저장합니다. 같은 폴더를 다시 연결하면 안내를 갱신합니다.
+2. 이번 작업의 프로젝트에서 선택합니다. 새 프로젝트 선택은 일반 개발 모드로 시작합니다.
+3. 모델을 선택하고 구현할 기능과 확인할 결과를 입력합니다.
+4. Agents에서 역할별 진행·질문·구현 파일·검증 결과를 확인합니다.
+5. 완료 작업의 작업공간에서 변경을 검토한 뒤 원본 프로젝트에 반영합니다. 플랫폼이 자동 merge/push하지 않습니다.
+
+예: CSV 실험 로그에서 결측치를 검사하고 그래프를 그리는 기능을 구현해줘. src/loader.py를 재사용하고 tests/ 회귀 테스트로 확인해줘.
+
+## 지식맵에서 구체적인 정보 읽기
+
+Map → 프로젝트 필터 또는 프로젝트 가지 → 기록 선택으로 들어갑니다.
+
+- 전체 본문과 코드 블록, 설계·구현 결정과 그 이유
+- 구현/검증 파일과 저장된 해시
+- 참고 문서 링크와 실제 조사 내용
+- 저장된 실행·측정 반환 결과, 상태와 적용 범위
+- 작업공간 위치, 관련 작업, 원본 기록과 검사 내역
+
+에이전트의 서술은 미검증으로 저장합니다. 호스트 반환 기록의 근거 확인이 시나리오 전체 성공을 뜻하지는 않습니다. 과거 기록에 세부 내용이 저장되지 않았다면 이를 새로 만들어 표시하지 않습니다.
+
+새 작업은 선택한 프로젝트와 보드 범위의 지식을 조회합니다. 프로젝트를 바꿔도 진행 중 작업의 대상과 설정은 유지됩니다.
+
+## 하드웨어·원격 화면은 선택 사항
+
+일반 개발에는 보드 등록이 필요 없습니다. 하드웨어 작업은 실행기에 -Profile hardware를 지정하고, 화면에서 Hardware와 실제 사용할 보드·장비 구성을 선택합니다. 연결한 일반 프로젝트에 연구실 RTASE 설정을 자동으로 적용하지 않습니다.
+
+새 보드의 USB/COM 탐색과 시리얼 통신은 제공하지만 임의 보드의 Flash 업로드·범용 SSH 실행을 모두 지원하지는 않습니다. 해당 업로드/측정 실행기를 추가하고 실제 장비로 검증해야 합니다.
+
+Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레이 설정을 별도로 준비하세요. 로컬 연구실의 인증 파일이나 기존 토큰을 복사하지 않습니다. 최초 프로젝트 연결은 로컬 웹에서 진행하세요.
+
+## 지원 범위와 제한
+
+- 현재 로컬 런타임은 Codex CLI입니다. Claude/Ollama/임의 API 공급자까지 선택하는 기능은 없습니다.
+- Git 저장소와 첫 커밋이 필요합니다. Git 서브모듈의 자동 초기화, 모든 언어의 툴체인 설치는 제공하지 않습니다.
+- Builder의 일반 명령은 작업공간의 샌드박스에서 실행하며 네트워크 설치가 제한됩니다. 프로젝트의 의존성과 외부 서비스 준비 방법을 안내하세요.
+- 소스 변경은 작업공간에 남습니다. 최종 병합·배포는 사람이 검토합니다.
+- 프로젝트 구분은 작업/지식의 분류입니다. 하나의 데몬을 여러 사람이 쓰는 조직용 사용자 권한 분리 기능은 아닙니다. 연구원별 독립 설치를 기본으로 안내합니다.
 
 ## 저장소 구성
 
-- `QKD_PROJ/orchestrator/` — 작업 원장, 한 tick 한 단계 루프, 데몬, named pipe 제어 채널
-- `QKD_PROJ/agents/` — 역할과 도구 프로파일
-- `QKD_PROJ/contracts/` — gate 계약과 결정론적 pass criteria
-- `QKD_PROJ/boards/`, `campaigns/`, `capabilities/` — 보드·장비·허용 범위 모델
-- `QKD_PROJ/research/`, `knowledge/` — 자료 조사와 누적 지식 그래프
-- `QKD_PROJ/hwtools/` — 빌드·시뮬레이션·배포·측정용 원시 도구 어댑터
-- `QKD_PROJ/webui/` — Pixel Office, agent feed, campaign 제어, Obsidian형 knowledge map, Cloudflare relay
-- `.claude/agents/`, `.claude/skills/` — 재사용할 에이전트 및 실행 스킬
-- `BeagleBone-Black/` — BBB/PRU 호스트·펌웨어·오버레이 소스
+| 위치 | 내용 |
+|---|---|
+| QKD_PROJ/orchestrator/ | 프로젝트 연결, 3개 역할 실행, 원장·데몬·작업공간 |
+| QKD_PROJ/knowledge/ | 지식 저장·검색·자동 적재 |
+| QKD_PROJ/webui/ | React 화면, 로컬 웹 서버, 선택적 Cloudflare 연결 |
+| QKD_PROJ/boards/, hwtools/ | 선택적 보드/장비 구성과 어댑터 |
+| scripts/run-platform.ps1 | 자기 프로젝트를 연결하는 공유용 실행기 |
+| BeagleBone-Black/, Lattice/ | 포함된 하드웨어 활용 예제와 자료 |
+| QKD_PROJ/tests/ | 장비·유료 모델을 호출하지 않는 회귀 검증 |
 
-`STM32Cube/stm32g474-hrtim-delay` 구현은 별도 저장소로 관리합니다: <https://github.com/basstwd17-cmyk/stm32g474-hrtim-delay>
+이전 계약/Campaign 관련 파일은 과거 구현·호환 자료입니다. 신규 시나리오 실행의 필수 조건이 아닙니다. STM32 구현은 별도 저장소입니다: https://github.com/basstwd17-cmyk/stm32g474-hrtim-delay
 
-## 로컬 실행
+## 문서와 검증
 
-Windows PowerShell에서 프런트엔드 소스를 바꾼 경우에만 먼저 빌드합니다.
+- [프로젝트 개발 안내](QKD_PROJ/docs/project-development.md)
+- [현재 구현 상태와 검증 범위](QKD_PROJ/STATUS.md)
+- [모델 선택](QKD_PROJ/docs/model-selection.md)
+- [하드웨어 운영 예제](QKD_PROJ/webui/RUNNING.md)
+- [선택적 원격 배포](QKD_PROJ/webui/cloudflare/README.md)
 
-```powershell
-$repoRoot = "C:\KIST\ai-hardware-autolab"
-Set-Location "$repoRoot\QKD_PROJ\webui\frontend"
-npm.cmd ci
+~~~powershell
+.\.venv\Scripts\python.exe -m pytest QKD_PROJ/tests/test_projects.py QKD_PROJ/tests/test_conversation_service.py QKD_PROJ/tests/test_conversation_ingestion.py -q
+cd QKD_PROJ/webui/frontend
+npm.cmd test
 npm.cmd run build
-```
+~~~
 
-터미널 1에서 데몬을 실행합니다.
+실행 DB, 등록한 개인 프로젝트 경로, 작업공간, 세션 토큰, 계정별 Cloudflare 설정과 신규 실행 결과는 각 PC의 운영 데이터입니다. 저장소에 커밋하거나 일괄 삭제하지 않습니다. 기존 연구실 지식 DB는 소스 clone에 자동으로 포함되지 않습니다.
 
-```powershell
-Set-Location $repoRoot
-py -3 -m QKD_PROJ.orchestrator `
-  --ledger QKD_PROJ\webui\state\web-jobs.db `
-  --runs QKD_PROJ\runs `
-  --contracts QKD_PROJ\contracts `
-  --knowledge-db QKD_PROJ\runs\knowledge.db `
-  --knowledge-project qkd-proj `
-  --knowledge-hardware rtase-v1 `
-  --knowledge-revision v1.0 `
-  --profile offline `
-  --pipe "\\.\pipe\qkd-agent-web"
-```
-
-터미널 2에서 웹 서버를 실행하고 출력되는 전체 token URL을 엽니다.
-
-```powershell
-Set-Location $repoRoot
-py -3 -m QKD_PROJ.webui.backend.app `
-  --daemon "\\.\pipe\qkd-agent-web" `
-  --static QKD_PROJ\webui\frontend\dist
-```
-
-처음에는 `--profile offline`으로 검증하십시오. Hardware campaign은 별도 승인 범위, 연결된 장비, fail-safe 출력 상태와 watchdog이 준비된 뒤 사용합니다.
-
-## 검증
-
-```powershell
-py -3 -m pytest QKD_PROJ\tests -q
-cd QKD_PROJ\webui\frontend
-npm.cmd ci
-npm.cmd test -- --run
-npm.cmd run build
-```
-
-## 저장하지 않는 데이터
-
-실행 DB, run 증거, 세션 토큰, Cloudflare 장치/operator token, 로컬 `wrangler.jsonc`, 비트스트림 및 빌드 출력은 의도적으로 Git에서 제외합니다. 이들은 각 실험 장비와 사용자 환경의 로컬 상태이며 소스 코드와 분리해야 합니다.
-
-Cloudflare relay를 새 환경에 배포할 때는 `QKD_PROJ/webui/cloudflare/wrangler.example.jsonc`를 개인 `wrangler.jsonc`로 복사하고 자신의 D1 database ID를 넣으십시오. 토큰은 파일에 커밋하지 말고 환경변수 또는 Cloudflare secret으로만 전달합니다.
-
-## 제3자 에셋
-
-Pixel Office 에셋의 원본, 고정 커밋, 파일별 SHA-256과 라이선스는 `QKD_PROJ/webui/assets/MANIFEST.json` 및 `LICENSE-pixel-agents`에 기록되어 있습니다. 자세한 내용은 `THIRD_PARTY_NOTICES.md`를 확인하십시오.
+제3자 에셋의 출처·라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)와 QKD_PROJ/webui/assets/MANIFEST.json을 참고하세요.

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from QKD_PROJ.hwtools import Contracts, RunRecord, SafetyGate  # noqa: E402
 from QKD_PROJ.hwtools.jtag import scan_jtag  # noqa: E402
 from QKD_PROJ.hwtools.sram import program_cpld_sram  # noqa: E402
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ PROGRAM_XCF = ROOT / "contracts" / "gate12-pru-dac1-sram-program.xcf"
 
 
 def main() -> int:
+    require_brokered_entrypoint(__file__)
     gate = SafetyGate(
         Contracts.load("gate12-pru-dac1-plan.yaml"),
         allow_hardware=True,

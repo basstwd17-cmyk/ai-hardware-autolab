@@ -66,7 +66,7 @@ describe('vendored office layout', () => {
     ).toThrow(/unknown type/)
   })
 
-  it('pins six work positions to room coordinates', () => {
+  it('pins the three public roles to visible room coordinates', () => {
     const seats = defaultOfficeSeats({
       minCol: 0,
       minRow: 9,
@@ -75,8 +75,10 @@ describe('vendored office layout', () => {
       width: 320,
       height: 192,
     })
-    expect(seats).toHaveLength(6)
-    expect(seats[0]).toEqual({ x: 48, y: 48, row: 12, column: 3 })
-    expect(seats[5]).toEqual({ x: 112, y: 144, row: 18, column: 7 })
+    expect(seats).toEqual([
+      { agent: 'builder', x: 48, y: 56, row: 14, column: 3, facing: 'up' },
+      { agent: 'lead', x: 112, y: 56, row: 14, column: 7, facing: 'up' },
+      { agent: 'verifier', x: 112, y: 136, row: 19, column: 7, facing: 'left' },
+    ])
   })
 })

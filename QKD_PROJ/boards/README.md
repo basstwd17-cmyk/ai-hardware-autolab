@@ -36,11 +36,14 @@ Start every unverified executable stage as `adapter_required`. Change it to
 have an offline test. Hardware stages additionally use `mode: hardware` and
 `requires_campaign: true`.
 
-An unknown board still receives source research and an architecture decision,
-but the mission ends as `board_profile_required`. It cannot borrow the RTASE,
-BBB, NUCLEO or oscilloscope adapter merely because a model thinks they look
-similar. Re-submit the same scenario after the reviewed profile is installed;
-the normal mission then continues automatically.
+An unknown board still cannot borrow the RTASE, BBB, NUCLEO or oscilloscope
+adapter merely because a model thinks they look similar. The three-agent
+mission instead creates and tests a board map, profile and adapter in its
+isolated workspace. When that offline step passes, WorkspaceManager publishes
+the profile and the following Lead iteration reloads the catalog automatically;
+the user does not need to submit the scenario again. Physical stages remain
+`adapter_required` until their exact command and bounds are verified, and then
+still require the one digest-bound Campaign.
 
 `STM32G474RE` by itself is an MCU, not a board. The catalog deliberately keeps
 the NUCLEO-G474RE and B-G474E-DPOW1 identities separate.

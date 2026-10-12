@@ -32,9 +32,11 @@ Three rules follow from that:
 from __future__ import annotations
 
 import json
+import math
 import re
+import statistics
 from dataclasses import dataclass, field as dc_field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable, Sequence
 
 from QKD_PROJ.hwtools.result import sha256_file
@@ -75,6 +77,72 @@ EXHAUSTED = "exhausted"
 PRIMARY_RUN_MISSING = "primary_run_missing"
 
 _OPERATOR_TEXT = re.compile(r"^\s*(==|!=|<=|>=|<|>)\s*(.+?)\s*$")
+def _numeric(value: Any, where: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        raise EvidenceError(f"{where} must be a finite number")
+    return float(value)
+
+
+def _bounds(value: Any) -> tuple[float, float]:
+    if not isinstance(value, dict):
+        raise EvidenceError("between expects an object with min and max")
+    return _numeric(value.get("min"), "min"), _numeric(value.get("max"), "max")
+
+
+def _tolerance(value: Any) -> tuple[float, float]:
+    if not isinstance(value, dict):
+        raise EvidenceError("within_tolerance expects target and tolerance")
+    target = _numeric(value.get("target"), "target")
+    tolerance = _numeric(value.get("tolerance"), "tolerance")
+    if tolerance < 0:
+        raise EvidenceError("tolerance must be non-negative")
+    return target, tolerance
+
+
+def _series(value: Any) -> list[float]:
+    if not isinstance(value, list) or not value:
+        raise EvidenceError("statistical operators need a non-empty list")
+    return [_numeric(item, "series value") for item in value]
+
+
+def _limit(value: Any, *keys: str) -> float:
+    if isinstance(value, dict):
+        for key in keys:
+            if key in value:
+                return _numeric(value[key], key)
+    return _numeric(value, "limit")
+
+
+def _within_tolerance(observed: Any, expected: Any) -> bool:
+    target, tolerance = _tolerance(expected)
+    return abs(_numeric(observed, "observed") - target) <= tolerance
+
+
+def _within_relative_tolerance(observed: Any, expected: Any) -> bool:
+    if not isinstance(expected, dict):
+        raise EvidenceError("within_relative_tolerance expects target and relative_tolerance")
+    target = _numeric(expected.get("target"), "target")
+    relative = _numeric(
+        expected.get("relative_tolerance", expected.get("rel_tol")),
+        "relative_tolerance",
+    )
+    if relative < 0:
+        raise EvidenceError("relative_tolerance must be non-negative")
+    return abs(_numeric(observed, "observed") - target) <= abs(target) * relative
+
+
+def _between(observed: Any, expected: Any) -> bool:
+    low, high = _bounds(expected)
+    if low > high:
+        raise EvidenceError("between min cannot exceed max")
+    return low <= _numeric(observed, "observed") <= high
+
+
+def _mean_between(observed: Any, expected: Any) -> bool:
+    low, high = _bounds(expected)
+    return low <= statistics.fmean(_series(observed)) <= high
+
+
 _OPERATORS = {
     "==": lambda a, b: a == b,
     "!=": lambda a, b: a != b,
@@ -85,7 +153,53 @@ _OPERATORS = {
     "in": lambda a, b: a in b,
     "contains": lambda a, b: b in a,
     "empty": lambda a, _: len(a) == 0,
+    "within_tolerance": _within_tolerance,
+    "approx": _within_tolerance,
+    "within_relative_tolerance": _within_relative_tolerance,
+    "approx_rel": _within_relative_tolerance,
+    "between": _between,
+    "mean_between": _mean_between,
+    "stddev_below": lambda a, b: statistics.pstdev(_series(a)) <= _numeric(b, "maximum"),
+    "max_below": lambda a, b: max(_series(a)) <= _numeric(b, "maximum"),
+    "min_above": lambda a, b: min(_series(a)) >= _numeric(b, "minimum"),
+    "jitter_below": lambda a, b: _numeric(a, "observed jitter")
+    <= _limit(b, "max_ps", "max"),
+    # A minimum *achievable* stable interval is better when it is smaller.
+    "stable_interval_at_most": lambda a, b: _numeric(a, "stable interval")
+    <= _limit(b, "requested_interval_ns", "max_ns", "max"),
 }
+
+
+_UNIT_DEFINITIONS = {
+    "s": ("time", 1.0),
+    "ms": ("time", 1e-3),
+    "us": ("time", 1e-6),
+    "µs": ("time", 1e-6),
+    "ns": ("time", 1e-9),
+    "ps": ("time", 1e-12),
+    "hz": ("frequency", 1.0),
+    "khz": ("frequency", 1e3),
+    "mhz": ("frequency", 1e6),
+    "ghz": ("frequency", 1e9),
+    "v": ("voltage", 1.0),
+    "mv": ("voltage", 1e-3),
+    "a": ("current", 1.0),
+    "ma": ("current", 1e-3),
+    "ua": ("current", 1e-6),
+    "µa": ("current", 1e-6),
+}
+
+
+def normalize_value(value: float, from_unit: str, to_unit: str) -> float:
+    """Convert compatible engineering units and reject dimension mistakes."""
+
+    source = _UNIT_DEFINITIONS.get(str(from_unit).strip().lower())
+    target = _UNIT_DEFINITIONS.get(str(to_unit).strip().lower())
+    if source is None or target is None:
+        raise EvidenceError(f"unknown unit conversion {from_unit!r} -> {to_unit!r}")
+    if source[0] != target[0]:
+        raise EvidenceError(f"cannot convert {source[0]} to {target[0]}")
+    return _numeric(value, "value") * source[1] / target[1]
 
 
 class EvidenceError(ValueError):
@@ -114,6 +228,8 @@ class Condition:
     expect: Any
     source: str = ""
     run: str | None = None
+    unit: str | None = None
+    observed_unit: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Condition":
@@ -124,6 +240,10 @@ class Condition:
             expect=data["expect"],
             source=str(data.get("source", "")),
             run=data.get("run"),
+            unit=str(data["unit"]) if data.get("unit") is not None else None,
+            observed_unit=(
+                str(data["observed_unit"]) if data.get("observed_unit") is not None else None
+            ),
         )
 
     def operator(self) -> tuple[str, Any]:
@@ -133,9 +253,17 @@ class Condition:
             op = str(expect.get("op", "=="))
             if op not in _OPERATORS:
                 raise EvidenceError(f"unknown operator {op!r} in {self.field}")
-            if op != "empty" and "value" not in expect:
-                raise EvidenceError(f"operator {op!r} needs a 'value' in {self.field}")
-            return op, expect.get("value")
+            if op == "empty":
+                return op, None
+            if "value" in expect:
+                return op, expect.get("value")
+            # Human-readable generated YAML commonly places named parameters
+            # beside ``op``. Preserve that shape instead of forcing a second
+            # anonymous ``value`` nesting.
+            named = {key: value for key, value in expect.items() if key != "op"}
+            if named:
+                return op, named
+            raise EvidenceError(f"operator {op!r} needs parameters in {self.field}")
         if isinstance(expect, str):
             match = _OPERATOR_TEXT.match(expect)
             if match:
@@ -346,7 +474,18 @@ def verify_artifacts(run: str, runs_dir: Path | None = None) -> list[dict[str, s
         relative = artifact.get("path")
         if not claimed or not relative:
             continue
-        path = directory / Path(str(relative)).name
+        reference = str(relative).replace('\\', '/')
+        candidate = Path(reference)
+        if candidate.is_absolute() or PureWindowsPath(reference).is_absolute():
+            # Historical manifests may name the external source of an adopted
+            # file. Verify its in-run copy, never a live file outside the run.
+            resolved = candidate.resolve()
+            path = resolved if resolved.is_relative_to(directory.resolve()) else directory / candidate.name
+        else:
+            path = (directory / candidate).resolve()
+        if not path.resolve().is_relative_to(directory.resolve()):
+            mismatches.append({"run": run, "artifact": str(relative), "problem": "path outside run"})
+            continue
         if not path.is_file():
             mismatches.append({"run": run, "artifact": str(relative), "problem": "file missing"})
             continue
@@ -380,8 +519,10 @@ def _all_artifacts(manifest: dict[str, Any]) -> Iterable[dict[str, Any]]:
 def compare(observed: Any, condition: Condition) -> bool:
     op, expected = condition.operator()
     try:
+        if condition.unit and condition.observed_unit:
+            observed = normalize_value(observed, condition.observed_unit, condition.unit)
         return bool(_OPERATORS[op](observed, expected))
-    except TypeError:
+    except (TypeError, ValueError, statistics.StatisticsError, EvidenceError):
         # Comparing a string to a number, say. Not an exception the loop should
         # crash on -- it is a condition that does not hold, and the detail says why.
         return False

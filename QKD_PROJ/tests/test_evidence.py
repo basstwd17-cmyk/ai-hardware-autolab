@@ -211,6 +211,48 @@ def test_comparing_a_string_to_a_number_is_unmet_not_a_crash(tmp_path):
     assert result.status == UNMET
 
 
+@pytest.mark.parametrize(
+    "expect,observed,met",
+    [
+        ({"op": "within_tolerance", "target": 5.0, "tolerance": 0.5}, 5.4, True),
+        ({"op": "within_tolerance", "target": 5.0, "tolerance": 0.5}, 5.6, False),
+        ({"op": "between", "min": 4.5, "max": 5.5}, 5.0, True),
+        ({"op": "mean_between", "min": 4.9, "max": 5.1}, [4.9, 5.0, 5.1], True),
+        ({"op": "jitter_below", "max_ps": 200.0}, 125.0, True),
+        (
+            {"op": "stable_interval_at_most", "requested_interval_ns": 5.0},
+            4.8,
+            True,
+        ),
+    ],
+)
+def test_measurement_operators(tmp_path, expect, observed, met):
+    root = tmp_path / "runs"
+    root.mkdir()
+    make_run(
+        root,
+        "20260101T000000Z_measurement",
+        {
+            "verdict": "PASS",
+            "steps": [
+                {"tool": "scope", "action": "capture", "measurements": {"value": observed}}
+            ],
+        },
+    )
+    result = evidence.evaluate(
+        Condition("measurements.value", expect, "scope measurement", "20260101T000000Z_measurement"),
+        root,
+    )
+    assert result.met is met
+
+
+def test_units_are_normalized_only_within_one_dimension():
+    assert evidence.normalize_value(5.0, "ns", "ps") == pytest.approx(5000.0)
+    assert evidence.normalize_value(1.0, "MHz", "Hz") == pytest.approx(1_000_000.0)
+    with pytest.raises(EvidenceError, match="cannot convert"):
+        evidence.normalize_value(5.0, "ns", "MHz")
+
+
 # -- artifact hashes ---------------------------------------------------------
 
 
@@ -395,6 +437,43 @@ def test_claims_are_scoped_to_the_run_their_block_names(tmp_path):
     )
     report = audit.run_audit(contracts, runs_dir)
     assert report.by_severity(audit.ERROR) == []
+
+
+def test_nested_artifacts_are_checked_at_their_actual_paths(tmp_path):
+    import hashlib
+    root = tmp_path / 'runs'
+    directory = root / 'nested'
+    artifacts = []
+    for name, content in [('a/output.txt', 'first'), ('b/output.txt', 'second')]:
+        file = directory / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(content.encode())
+        artifacts.append({'path': name, 'sha256': hashlib.sha256(content.encode()).hexdigest()})
+    (directory / 'manifest.json').write_text(json.dumps({'artifacts': artifacts}))
+    assert evidence.verify_artifacts('nested', root) == []
+    (directory / 'b/output.txt').write_text('changed')
+    mismatches = evidence.verify_artifacts('nested', root)
+    assert len(mismatches) == 1 and mismatches[0]['artifact'] == 'b/output.txt'
+
+
+def test_artifact_traversal_is_not_replaced_by_same_basename(tmp_path):
+    import hashlib
+    directory = tmp_path / 'runs' / 'one'
+    directory.mkdir(parents=True)
+    (directory / 'proof.txt').write_bytes(b'proof')
+    (directory / 'manifest.json').write_text(json.dumps({'artifacts': [
+        {'path': '../proof.txt', 'sha256': hashlib.sha256(b'proof').hexdigest()}]}))
+    assert evidence.verify_artifacts('one', directory.parent)[0]['problem'] == 'path outside run'
+
+
+def test_legacy_absolute_artifact_uses_adopted_run_copy(tmp_path):
+    import hashlib
+    directory = tmp_path / 'runs' / 'one'
+    directory.mkdir(parents=True)
+    (directory / 'proof.txt').write_bytes(b'proof')
+    (directory / 'manifest.json').write_text(json.dumps({'artifacts': [
+        {'path': 'C:/historical-build/proof.txt', 'sha256': hashlib.sha256(b'proof').hexdigest()}]}))
+    assert evidence.verify_artifacts('one', directory.parent) == []
 
 
 def test_a_claim_contradicting_its_own_run_is_an_error(tmp_path):

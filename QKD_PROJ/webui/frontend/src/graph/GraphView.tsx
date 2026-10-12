@@ -234,10 +234,9 @@ function Empty() {
     <div className="empty">
       <h3>Nothing on the ledger yet</h3>
       <p>
-        The graph is derived, so it is empty until a job exists. Start one and it appears with
-        the contract it was checked against.
+        The graph is derived, so it is empty until a scenario job exists.
       </p>
-      <code>py -3 -m QKD_PROJ.orchestrator start-job &lt;contract&gt; "&lt;objective&gt;"</code>
+      <code>py -3 -m QKD_PROJ.orchestrator mission "&lt;scenario&gt;"</code>
     </div>
   )
 }

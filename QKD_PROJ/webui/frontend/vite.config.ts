@@ -27,6 +27,7 @@ export default defineConfig({
     },
   },
   build: {
+    rollupOptions: { input: { main: 'index.html', knowledge: 'knowledge.html' } },
     outDir: 'dist',
     sourcemap: true,
     // elkjs is most of the bundle and it is a bundled layout engine, not

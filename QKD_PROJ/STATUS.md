@@ -1,256 +1,226 @@
-# 재개 지점 — 2026-08-21
+# 현재 구현 상태
 
-다음 세션은 여기서부터 시작한다. 상세 근거는 `docs/`, `contracts/`, `../GATE1_REVIEW.md`에 있다.
+기준일: 2026-10-12
 
-## 한 줄 요약
+## 연구원 프로젝트 연결과 지식 상세
 
-**Gate 12의 디지털 제어 경로가 뚫렸다 — 다만 범위 한정이다.** BBB 통합 오버레이 활성화·재부팅
-검증, CPLD SRAM 프로그램, GPIO-SPI CODE0..3 왕복(bit_errors 0), PRU 0·1·2·3 시퀀스 4샷 완료까지
-기록으로 남아 있다. **증명되지 않은 것: D1B/D1CLK의 전기적 무결성, DAC 변환, 앰프·SMA 출력.**
-승인된 SRAM 실행 1회는 소진됐고, 계약의 `allowed_operations`에서 `jtag_scan`·`sram_fast_program`이
-빠졌다 — 재적재하려면 새 승인이 필요하다. 에이전트 플랫폼은 P0(MCP 서버)·P1(에이전트 정의 6개와
-검증 루프)까지 올라갔고 P2(잡 러너)는 미착수.
+- 플랫폼 설치 위치와 별도 Git 프로젝트를 연결·선택한다. 이름·목적·빌드/검증 안내를
+  저장하고 각 작업의 Brief에 고정한다. 등록과 목록 조회는 인증된 로컬 웹 명령으로 제공한다.
+- 프로젝트별 Git 작업공간에서 임의 src/tests 구조와 무시되지 않은 신규 소스를 개발한다.
+  원본 소스는 자동 변경하지 않는다. 기존 작업공간과 하드웨어 기본 실행은 유지한다.
+- 공유용 실행기는 일반 개발을 기본으로 시작한다. 보드 없는 작업에는 RTASE 문맥을
+  넣지 않고, 외부 프로젝트가 장비를 사용하려면 구성을 명시한다.
+- 지식 조회·적재는 선택한 프로젝트별로 분리한다. 미검증 개발 메모는 확인된 지식과
+  구분해 재사용 단서로 전달한다. 모델에 임의의 기존 메모를 검증된 사실로 승격하지 않는다.
+- Map에 프로젝트 필터/가지와 전체 본문·코드 블록·파일·조사 자료·실제 반환 결과·원본
+  상세를 추가했다. 화면에서 프로젝트 변경과 예제 기록의 검색→상세 열기를 확인했다.
+- 검증: 프로젝트/작업공간/wire/대화/지식 관련 Python 112개, 프런트엔드 134개,
+  TypeScript/Vite 빌드와 Python compile 통과. 두 독립 프로젝트와 별도 설치 폴더의
+  기본 프로젝트 개발을 모의 모델로 검증했다. 실제 유료 모델·장비는 호출하지 않았다.
+- 공유 README, 프로젝트 개발 안내와 scripts/run-platform.ps1을 갱신했다. 개인
+  운영 DB/작업공간/계정 설정은 업로드 목록에서 제외한다.
 
-## 지금 보드 상태
+## 대화형 결과 자동 적재와 운영 지식맵
 
-기록이 말하는 마지막 상태다 (2026-08-21 01:26 UTC, run `20260821T012554Z_gate12_pru_dac1_sram`).
-그 이후 전원을 껐는지는 **기록에 없다.** 껐다면 CPLD 구성은 사라졌다.
+- `Service.tick_once` 전후에 역할 응답·장비 결과를 지식 저장소로 적재한다.
+  기존 완료 작업도 원장 커서부터 따라잡는다. 적재 실패는 개발 작업을 중단하지 않고
+  다음 tick에서 재시도한다. 기록 후 커서를 갱신하고 재시작 시 동일 버전을 중복 저장하지 않는다.
+- 선택적인 `knowledge: [{topic, text}]` 메모가 없으면 기존 요약을 사용한다.
+  출처·파일 해시·run·작업·시각을 보존하고 선택한 보드/리비전에 분류한다. 새 기능 이름도
+  보드 가지에 표시한다. 미선택 작업에 RTASE 범위를 임의로 붙이지 않는다.
+- 에이전트 설명은 미검증이다. 호스트 장비 반환값을 그대로 옮긴 기록만 원장 근거 확인으로
+  표시한다. PASS나 파일 존재를 시나리오 전체 성공으로 해석하지 않는다.
+- 운영 `/knowledge.html`과 첫 화면의 `지식맵 열기`를 추가했다. 기존 operator 인증으로
+  조회하고 device 인증 릴레이가 D1에 증분 복제한다. 오프라인·동기화 진도를 표시한다.
+- 운영 D1 테이블 추가와 `main` 배포 완료. 데몬·릴레이 실행은 사용자가 담당하며
+  실시간 운영 동기화는 실행 후 확인해야 한다.
+- 검증: 기본 Python 75개 통과, 추가 회귀 74개 통과/기존 계약·start-job 의존 테스트
+  3개 실패, 프런트엔드 126개 통과, Cloudflare 인증/증분 복제 3개 통과, 빌드 통과.
+- 실제 원장 복사본의 이벤트 28,581번까지 처리해 43개 지식 기록을 적재했다.
+  재실행 후에도 43건으로 유지됐다. 과거 자료의 공백 정규화 오류를 수정하고
+  적재 테스트 6개를 다시 통과했다. 운영 진입 링크·로그인 화면과 API 401을 확인했다.
 
-- **Gate 12 구성**이 휘발성 SRAM에 올라갔다 (`gate12_pru_dac1`, bitstream `dfedb3d0…`).
-  Gate 11 구성이 아니다 — 덮어썼다.
-- BBB는 **통합 오버레이** `BB-RTASE-A-GPIO-SPI-PRU-00A0`로 부팅돼 있다. `spi0` 비활성
-  (`spidev0_0_present: false`), pinmux 검증됨, PRU 서비스 active, `/dev/rpmsg0` 존재,
-  `pru_ping_ok`. uEnv 백업은 `/boot/uEnv.txt.pre-gate12`.
-- **상단 PCB가 분리된 상태**로 실행됐다 (`physical_state: top_PCB_separated`).
-- PRU 출력은 유한 시퀀스 후 비활성으로 복귀했다 (`pru_outputs_active: false`).
-- DAC 데이터 버스는 이제 CPLD가 **구동한다** (D1B 14비트 + D1CLK가 배치됨). 앰프 전원·RF1/RF2는
-  여전히 비활성이고, **CN1 미연결**이 아날로그 출력을 막는 유일한 검증된 방법이다
-  (AD9744 `SLEEP`은 GND 고정, THS3491 `PD#`는 +15 V 고정).
+## 전체 지식맵 시각화
 
-## Gate 진행
+- 기본 지식 화면을 어두운 Canvas의 별자리 형태로 추가했다. 분류별 색상, 실제 기록별
+  점, 확대·이동·검색·선택 상세를 제공하고 기존 카드는 `가지별 보기`로 보존한다.
+- 기록은 전체 화면에 한 점씩 표시한다. 여러 분류에 속하는 기록은 선택 시 보조 연결로
+  표시한다. 배치는 결정적이며 보드·리비전과 원본 지식·근거는 변경하지 않는다.
+- 프런트엔드 24개 파일의 125개 테스트와 TypeScript/Vite 빌드 통과.
+  최종 화면을 저장 자료 806건의 읽기 전용 복사본으로 Chrome에서 재확인했다.
+  PRU 검색 92건, 검색 결과의 보드·리비전·개별 문서 근거, 선택 확대, 드래그 이동,
+  휠 축소, 가지별 보기 전환과 전체 보기 복귀를 확인했고 브라우저 오류는 없었다.
+  로컬 확인용 `/map-review.html`은 운영 배포 후 정리했다.
+- 자동 적재는 위의 후속 구현에서 연결했다.
 
-| Gate | 내용 | 결과 |
-|---|---|---|
-| 1 | JTAG scan → SRAM program → pin 117 GPIO | scan·program PASS. **GPIO 측정은 승인만 있고 실행 0회** |
-| 2 | BBB → CPLD loopback | 빌드만, `pinned_not_approved` |
-| 3 | RF1 데모 / SPI 레지스터 / 경로 진단 | `cs_seen=1`, `sclk_seen=1`, **`write_done=0`** |
-| 4–8 | SPI loopback·정적 HIGH 변형 | rx가 `000000` 또는 `ffffffff` 상수 |
-| **10** | 고정 응답 `a55a3cc3f00f` 클럭드 리턴 | **스코프·GPIO는 정확히 수신, McSPI만 `000000`** → 결함 격리. ⚠ GPIO 근거 run이 디스크에 없다 (아래 미해결) |
-| **11** | GPIO-SPI CODE0..3 레지스터 | **PASS. `[0x0001,0x0123,0x2345,0x3FFE]` 왕복, bit_errors 0** |
-| **12** | PRU → CPLD → DAC1 채널 A | **디지털 구간 PASS (범위 한정).** 빌드 0/0 · 오버레이 부팅 검증 · SRAM program · CODE 왕복 0 · PRU 4샷. **아날로그 미착수** |
+## 지식 마인드맵
 
-`spidev0.0`(McSPI)는 수신이 검증되지 않았다. 속도가 필요해지면 나중에 고칠 수 있지만
-초기 CODE 설정 경로의 의존성은 아니다.
+- `Map`의 기본 화면을 실행·계약 이력에서 지식 마인드맵으로 바꿨다. 첫 화면은
+  보드 / 부품 / 회로·인터페이스 / 펌웨어·소프트웨어 / 측정·검증 / 문서·자료의
+  6개 가지다. 선택한 가지의 하위 항목만 펼치고 상단 경로로 상위 분류에 돌아간다.
+- 예: 보드 → rtase-v1 · v1.0 → PRU → 개별 기록 → 출처·검사 결과.
+  넓은 가지와 기록 목록은 10개씩 표시하고 검색은 접힌 가지의 기록도 찾는다.
+  한 기록을 여러 분류에서 찾을 수 있으므로 가지별 건수의 합은 전체 건수와 다를 수 있다.
+- 계약 작업 배정·필요 자료 같은 과거 절차 기록은 문서·자료의 별도 가지에 모았다.
+  원본 관계·근거 상세와 실행 이력 화면, 저장된 지식·계약·run 파일은 보존한다.
+  상세 패널은 선택한 기록의 근거만 보여주며 검증 상태와 보드·리비전을 함께 표시한다.
+- 미등록 이름도 저장된 보드 entity 또는 hardware scope로 분류한다. 보드 식별자에
+  프로젝트·하드웨어·리비전을 포함해 서로 다른 리비전의 지식을 같은 보드 노드로 합치지 않는다.
+  키워드 기반 분류선은 탐색 안내이며 실제 회로 연결이나 사실 검증 결과가 아니다.
+- 10월 6일 읽기 전용 점검: 현재 지식 806건(미검증 672, 근거 확인 134), 이 중
+  decision 625건. 저장 자료의 복사본으로 가지 탐색·개별 근거·검색 이동을 브라우저에서 확인했다.
+- 검증: 프런트엔드 23개 파일의 122개 테스트와 TypeScript/Vite 빌드 통과.
+  지식 DB와 장비에는 쓰기·실행을 수행하지 않았다.
+- 10월 6일 화면 구현 당시에는 결과 자동 적재가 없었다. 10월 8일 위의 원장 기반
+  적재 경로를 연결했으며 기존 지식 검색·재사용 경로는 그대로 사용한다.
 
-## 다음에 할 일
+## 다른 보드 등록·탐색·작업별 선택
 
-1. **Gate 12 다음 단계는 `digital_timing`** — 계약 `verification_sequence`의 첫 항목.
-   SYM_A0·SYM_A1·P9_31·D1CLK·대표 D1B 비트를 스코프로 관측한다. 전제조건은 CN1 분리.
-   지금까지 증명된 것은 **호스트가 보낸 명령이 완료됐다**는 것이지, 그 신호가 DAC 핀에
-   제대로 도착했다는 것이 아니다. 그 간극이 이 단계다.
-   재적재가 필요하면 **새 승인부터** — 승인된 1회는 이미 소진됐고 계약이
-   `jtag_scan`·`sram_fast_program`을 다시 금지 목록에 넣었다.
-2. ~~allowlist 해시 불일치 해소~~ — **2026-08-27 해결.** 드리프트가 아니라 계약의
-   전사 오류였다: 스크립트는 `a2e47df` 이후 한 번도 바뀌지 않았고 blob은 늘
-   `735c91d3…`였다. gate9 한 줄만 정정. `run_bbb`가 다시 실행한다.
-3. **Gate 1 GPIO 측정 3회** — 승인은 있고 실행 0회. Gate 1이 공식적으로 안 닫힌 유일한 이유.
-4. **에이전트 플랫폼** — P2 원장(`bee8e43`에서 고정)과 루프가 올라갔다. App Server
-   스파이크는 팀원이 완료(Codex 0.148.0에서 commandExecution·fileChange·mcpToolCall·
-   approval·subAgentActivity 관측, `CodexAppServerAdapter` 구현). 다음은 어댑터 위의
-   `AgentRunner` 구현 → seam에서 봉투 검증 → `run_bbb` effect 분리.
-   `event_id`/`seq` 계약과 UI replay bridge는 팀원 담당.
-   상세: `docs/2026-08-21-agent-platform-p2-loop.md` §9.
-5. **Gate 12 산출물 커밋.** 에이전트 플랫폼(P1)과 증거 감사는 커밋됐다. 아직 밖에 있는 것:
-   `contracts/gate12-*`, `candidates/gate12-pru-dac1/`, `gate12_pru_dac1/`, BBB host 도구·오버레이.
-   `runs/`는 gitignore라 candidates/contracts가 유일한 증거 사슬인데 그게 추적되지 않고 있다.
+- 시작 화면에 구성 선택과 새 보드 등록을 추가했다. 보드 모델/리비전, 프로젝트 기준
+  소스 경로, 문서 URL, 사용자 메모와 선택한 USB/COM 연결을 저장한다.
+  연결이 없어도 소스 개발용으로 등록할 수 있다. 등록한 구성은 재시작 뒤에도 유지된다.
+- `hardware.discover`는 시리얼 포트 메타데이터와 Windows USB PnP 목록을 읽는다.
+  포트를 열거나 펌웨어/파형을 확인하지 않는다. 장치가 보이는 `present`와 기존 드라이버의
+  모델 식별 성공 `connected`를 구분한다. 한 종류의 장치가 여러 개면 개별 ID로 확인한다.
+- `hardwareSelection`은 mission/preflight/연결 확인 요청으로 전달한다. job별 board/revision과
+  해시를 고정하고, 같은 시나리오라도 다른 보드이면 별도 job을 만든다. 실행부는 job의
+  구성을 사용하며, UI의 다음 선택이나 데몬 재시작이 기존 job의 대상을 바꾸지 않는다.
+  기존 구성 파일을 직접 바꿨으면 기존 job을 다른 장비로 재지정하지 않고 변경 사실을 알린다.
+- 데몬 기본 장비는 `--hardware-board`/`--hardware-revision`으로 지정한다.
+  `--knowledge-hardware`/`--knowledge-revision`은 장비 선택에 사용하지 않는다.
+  작업의 소스 안내와 지식 검색 범위도 선택한 보드로 전달한다.
+- 새 시리얼 보드는 `serial_exchange`로 8N1 통신을 수행하고 송신/수신 바이트와 결과를
+  run에 기록한다. USB 연결 정보가 달라지면 다른 장치를 대신 사용하지 않는다.
+  모든 구성의 장비 실행은 같은 잠금을 공유하고, 실행을 기다리는 동안 취소된 job은 장비를 호출하지 않는다.
+- 기존 RTM3004 스코프를 새 보드 구성에 함께 등록할 수 있다. 계측기 주소·입력 한계는
+  재사용하고 RTASE 신호명·핀·SRAM 제한은 복사하지 않는다. 새 보드의 측정 채널은
+  사용자가 시나리오에 `CH1=PWM`처럼 지정한다.
+- 지원 범위: 새 보드의 소스 개발·자료 전달·USB/COM 탐색·시리얼 통신·기존 스코프 재사용.
+  임의 USB 프로그래머, 범용 SSH 실행, STM32 등 새 보드의 Flash 업로드 실행기는 아직 없다.
+  실제 새 보드에서 코드 작성→업로드→파형 검증을 완주했다고 주장하지 않는다.
 
-## 미해결
+## 등록된 장비 연결 확인
 
-| 항목 | 막고 있는 것 | 필요한 것 |
-|---|---|---|
-| McSPI RX 원인 | 속도 (기능은 GPIO로 우회됨) | `SPI_LOOP` 내부 루프백, FIFO/`XFERLEVEL` 경로 |
-| pin 117 GPIO 측정 | Gate 1 종료 | 실행만 |
-| OSCH 정확도 | GPIO 주파수 판정 | MachXO2 데이터시트 |
-| U6 MODE 상태·DAC1_OUT 기준값 | Gate 12 아날로그 단계 | 첫 코드 스텝 전에 실측 |
-| D1B·D1CLK 전기적 무결성 | Gate 12 `dac_code_response` | `digital_timing` 스코프 관측 |
-| Gate 12 SRAM 재적재 | 구성이 날아갔을 경우 전부 | 새 승인 (1회분 소진) |
-| 전원 차단 여부 | 지금 보드 상태 확정 | 기록에 없음 — 확인만 |
-| **gate10 `gpio_spi_fallback_result` run 부재** (`primary_run_missing`) | GPIO 읽기 주장의 1차 증거 | **승인된 재실행만이 복구한다.** gate11 run으로 교체 불가 — 아래 참조 |
-| gate10 스코프 캡처가 RunRecord 없음 | 도구가 다이제스트를 고정 못함 | 캡처 경로가 RunRecord를 안 남긴다. 증거 파일 자체는 있고 읽힌다 |
-| **gate11 `gpio_protocol_result`가 run을 안 가리킴** (`unscoped_claim`) | `bit_errors: 0`을 검증할 방법 | 어떤 run에도 붙어 있지 않다 |
-| gate1 `build_result`가 run을 안 가리킴 (`unscoped_claim`) | 같음 | 같음 |
-| `digital_verification.json`이 artifact 미등록 | 해시가 도구가 아니라 손으로 고정됨 | PRU 검증 경로에서 artifact 등록 |
-| gate9 스크립트 7개 미분류 (`effect_class` 없음) | `--role measurement`가 BBB 스크립트를 하나도 못 돌림 | 제안 patch 검토 후 서명 |
-| ~~gate9 `spi_clocked_response_verify.sh`~~ | — | **2026-08-27 해결.** `pinned_file_drift`가 아니었다: 스크립트 커밋은 `a2e47df` 하나뿐이고 git blob과 디스크가 동일하다(`735c91d3…`, 줄바꿈 변환도 아님). 같은 커밋이 쓴 계약 digest가 처음부터 틀렸던 것 — 나중 커밋 `f301a03`의 gate10은 같은 파일에 올바른 값을 적었다. gate9 한 줄 정정 |
+- 작업 시작 시 전체 장비를 확인하던 단계를 제거했다. Lead·Builder·Verifier가
+  시나리오를 보고 `check_connections`에 필요한 장비 종류만 지정한다. 확인 뒤에는
+  요청한 역할로 돌아오며, 다른 장비는 호출하지 않는다.
+- 등록된 BBB는 SSH 모델/커널 조회, RTM3004는 식별/옵션 조회,
+  CPLD는 JTAG 체인 확인을 수행한다. 업로드·측정은 기존 Builder 실행 도구를 사용한다.
+- UI는 장비를 선택한 뒤 `hardware.check`의 `devices`로 비동기 확인을 시작하고
+  `hardware.status`로 결과만 읽는다. 선택을 생략하거나 비우면 전체 검사로 대체하지 않는다.
+  상태 조회 자체는 장비를 호출하지 않는다. 장비별 미확인·식별 확인·실패·드라이버
+  미지원 상태와 확인 시각, run을 구분한다. 확인과 프로그래밍은 같은 실행 잠금으로 직렬화한다.
+- 확인 결과는 해당 작업의 원장에 기록한다. 다음 역할과 재개된 작업은 장비별 최신
+  관측을 재사용한다. 새 관측이 필요할 때만 에이전트가 해당 장비를 다시 요청한다.
+  요청이 겹쳐도 서로 다른 대상의 확인 결과를 바꾸어 전달하지 않는다.
+- 식별 성공은 배선이나 기능 구현의 증거가 아니다. Verifier가 원래 시나리오에 맞춰
+  증거의 충분성을 판단하고, 실행부는 인용한 run이 실제 이 작업에 반환된 기록인지 확인한다.
+  단순 식별 요청은 식별 기록으로 마칠 수 있고, 소스 분석 요청에 장비 호출을 강제하지 않는다.
+  기능 출력 요청에는 실제 측정 근거가 필요하다는 에이전트 지침을 유지한다.
+- USB·시리얼 탐색 및 작업별 구성 선택/등록은 10월 1일 추가했다. 새 프로그래머 지원과
+  다른 보드에서의 전체 개발 검증은 후속 작업이다.
 
-## 구현 상태
+## 신규 작업 경로
 
-**3계층 `hwtools/`** — `measure_scope` · `build_cpld` · `scan_jtag` ·
-`program_cpld_sram` · `measure_gate1_gpio` · `run_bbb` · `deploy_pru` 전부 동작.
-고정부에 `ssh.py`(기록형 SSH, BB_PW 마스킹) 추가.
+- 모든 신규 `job.mission`은 conversation workflow 하나로 들어간다.
+- 역할 순서는 Lead → Builder → Verifier이며 job별 Git 작업공간을 사용한다.
+- Offline은 장비 도구를 제공하지 않는다.
+- Builder의 일반 개발 명령은 job별 작업공간의 Codex 샌드박스에서 실행한다.
+- Hardware는 `boards/<board>/<revision>/hardware.yaml`을 사용하고 장비 호출만 호스트 어댑터가 실행한다.
+- 과거 Gate/계약 파일 선택, 자동 계약 생성, Campaign 승인은 신규 경로에서 제거했다.
+- 2026-09-22: 데몬 초기화에서도 ContractCompiler, Campaign, 기존 Plan/Discovery 실행기와
+  별도 CodexAgentRunner 생성을 제거했다. 현재 프롬프트는 conversation_flow.py에 있다.
+  과거 작업은 조회 가능하며, 제거된 실행 방식의 미완료 작업은 자동 재개하지 않는다.
+  현재 경로에서 하드웨어 설정·장비 드라이버 검사는 계속 사용한다.
 
-**2계층 `orchestrator/`** — `ApprovalBundle` · `ConsumptionLedger` · `preflight` ·
-`Gate1Sequence` 구현·테스트 완료. **다만 실제 실행 경로에서는 여전히 우회 중**이다.
-Gate 3~12의 프로그래밍은 각 설계 폴더의 `program.py`가 hwtools를 직접 부른다.
+## 네이티브 실행 경로
 
-**MCP 서버 `mcp_server/`** — 같은 도구를 Claude Code·Codex 어디서든 호출.
-의존성 0, API 키 불필요. 기본 프로파일은 오프라인 도구만, `--allow-hardware`를 붙여야
-보드 도구가 **목록에 등록된다.** `--role <에이전트명>`으로 한 행까지 좁힌다 (`ROLE_TOOLS`·
-`ROLE_EFFECTS` 매트릭스가 유일한 출처). `measurement`와 `board-operator`가 `run_bbb`를
-공유하므로 계약 스크립트마다 `effect_class: read|mutate`를 보고 거른다 — **분류가 없으면
-`mutate`로 친다.** 설정을 바꾸고 복원하는 건 read가 아니다. 복원은 첫 변경의 부재가 아니라
-두 번째 변경이고, 그 사이에 프로세스가 죽으면 보드는 바뀐 채로 남는다.
-상세: `docs/2026-08-21-agent-platform-p0-mcp-server.md`, `mcp_server/README.md`
+- Docker 기반 `target_terminal` 실험 경로와 `--execution-environment` 옵션을 제거했다.
+- Docker Desktop, WSL, 컨테이너 이미지와 TCP 중계기는 플랫폼 실행 조건이 아니다.
+- Lead와 Verifier는 작업공간을 읽고, Builder만 같은 작업공간을 수정하고 로컬 명령을 실행한다.
+- 일반 명령은 네트워크 없이 job 작업공간 안에서 실행한다. 제조사 자료 조사는 Codex의 웹 검색을 사용한다.
+- 실제 BBB·스코프·CPLD 동작은 시나리오에 제공된 구조화 장비 도구를 호스트가 검증한 뒤 실행한다.
+- 실행 안내: [native-execution.md](docs/native-execution.md).
 
-**에이전트 정의 `agents/`** (신규, P1) — 6개 에이전트와 하나의 루프.
-`gate-architect`(계획) → `design-builder`·`board-operator`·`measurement`(실행)
-→ `verifier`(증거만으로 판정) → 불만족이면 재계획, 아니면 `reporter`가 문서화.
-계획자와 검증자는 **쓰기 도구가 없다.** 판정은 도구가 내린 값을 복사할 뿐이고,
-`met: true`인데 근거 run이 없으면 스키마가 거부한다. 같은 실패가 3회 반복되면
-`exhausted`로 종료한다 — 무한 루프를 막는 유일한 장치.
-정의는 frontmatter+markdown이라 벤더 중립이고, `export.py`가 Claude Code·Codex용으로
-렌더한다. MCP 서버는 `agent-<name>` 프롬프트로도 배포하며, 잠긴 서버에서는 보드
-에이전트를 도구와 똑같이 감춘다. 상세:
-`docs/2026-08-21-agent-platform-p1-agent-definitions.md`
+## RTASE V1 하드웨어 프로필
 
-**증거 감사 `orchestrator/evidence.py` · `audit.py`** (신규) — 조건 판정을 모델에서 회수했다.
-`EvidenceReducer`가 run 기록에서 필드를 꺼내 계약의 연산자로 비교하고, artifact 해시를 다시
-계산하고, `failure_signature`와 3회 규칙으로 `exhausted`를 결정한다. 기록되지 않은 필드는
-`evidence_missing`, 여러 스텝이 다른 값을 남겼으면 `ambiguous` — **둘 다 추측으로 메우지 않는다.**
-`audit.py`는 같은 원리를 전수 적용해 계약의 주장을 그 주장이 인용한 run에만 대조한다.
+- BBB: `192.168.50.2:22`, 사용자 `xilinx`, 실행 전에 BeagleBone Black identity 확인.
+- SPI: P9_17 CS, P9_18 MOSI, P9_21 MISO, P9_22 SCLK, mode 0.
+- Scope: RTM3004 `192.168.50.3:5025`.
+- SPI 관측: CH1 CS, CH2 CLK, CH3 MOSI, CH4 MISO, DCLimit/high impedance, 10x,
+  채널별 최대 절대 입력 3.3 V.
+- CPLD: LCMXO2-4000HC, 예상 IDCODE `0x012BC043`, FTUSB-0.
+- RF1 데이터 경로와 14-bit AD9744 핀 정보는 device map에 포함되어 있다.
 
-**작업 원장 `orchestrator/jobs.py`** (신규, P2) — 데몬의 기억. `jobs`·`events`·`handoffs`·
-`approvals` 4개 테이블. `iteration`과 실패 서명·strike를 **에이전트 밖**에 두고(프롬프트 안에
-있으면 rate-limit 창을 넘기며 사라진다), `events.event_id`가 UI 재접속 커서다 — 런타임의
-커서가 아니라. 상태 변경과 그걸 설명하는 이벤트는 **한 트랜잭션**에서 커밋된다.
-승인은 한 번만 결정되고, `state='pending'` 가드 + rowcount 확인으로 두 번 클릭이 경합해도
-하나의 결정이 된다. `exhausted` 판정은 여기서만 내려진다 — reducer는 한 iteration만 보고,
-같은 실패 3연속은 원장만 볼 수 있다. 상세:
-`docs/2026-08-21-agent-platform-p2-job-ledger.md`
+## Hardware 시나리오 실행
 
-**루프 `orchestrator/loop.py`** (신규, P2) — plan→execute→reduce→record→decide.
-`advance()`는 **한 걸음만 하고 반환한다.** 단계는 저장하지 않고 원장에서 파생하므로
-(iteration에 Plan 없음→plan, StepResult 없는 step→execute, Verdict 없음→reduce, 있음→decide)
-프로세스가 죽어도 `Loop`를 새로 만들면 그대로 이어진다. 하드웨어 스텝은 사람 앞에서 멈추고,
-**거부는 재요청하지 않는다.** 런타임 실패는 blocked이지 조건 실패가 아니다 — 죽은 프로세스는
-보드에 대해 아무것도 말하지 않는다. 정지 규칙 2개: 같은 실패 3회(`exhausted`)와
-iteration 상한(매번 다르게 실패하면 strike가 안 쌓여서 첫 규칙이 못 본다).
-**자체 이벤트 종류를 만들지 않는다** — 런타임 어휘는 어댑터 것이다. 상세:
-`docs/2026-08-21-agent-platform-p2-loop.md`
+- 제출한 Hardware 시나리오의 장비 호출은 Inbox 승인 없이 자동 실행한다.
+- Builder가 job 작업공간에서 만든 BBB 스크립트와 CPLD SRAM XCF/bitstream은 프로필
+  등록 없이 실행하며, 실제 실행 바이트의 해시를 run에 기록한다.
+- PRU 배포는 같은 job 작업공간의 `BeagleBone-Black` 소스를 업로드·빌드한다.
+- 작업공간 밖 파일, endpoint/장비 identity 불일치, 비휘발성 Flash 동작,
+  전기적 제한 위반은 거부한다.
+- 장비 접촉 뒤 결과가 불명확하면 자동 재시도하지 않는다.
+- 시나리오에 명시한 스코프 채널(예: `CH3=RF1`)은 별도 연결 완료 답변 없이 자동 적용한다.
+  사용자 지정은 원장에 기록하고 동일 장비 설정의 다음 job에도 이어진다. 입력 전압·종단·
+  프로브 한계는 바꾸지 않으며 모델이 제안한 배선을 실제 배선으로 간주하지 않는다.
+- 기존 `enable_analog_output` 금지 문자열은 현재 장비 도구에서 사용하지 않는 항목이라
+  프로필에서 제거했다. 시나리오 내 BBB/CPLD 제어는 기존 자동 실행 경로를 사용한다.
 
-**데몬 `orchestrator/daemon.py`** (신규) — 어느 job이 다음에 움직이는지 결정한다.
-`tick()`은 `advance()`를 **정확히 한 번** 부른다. 재시도 일정을 저장하지 않고 로그에서
-파생한다 (연속된 `rate_limited:` 차단 수 → 지수 백오프). 정지 이유 3종을 구분한다 —
-승인 대기(사람), rate limit(시계), 런타임 실패(사람). 오분류가 비대칭이라 명시적 예외가
-메시지 휴리스틱을 이기고, 휴리스틱은 **횟수 제한**이 있다. 6번 연속 "잠깐 스로틀"은
-스로틀이 아니다.
+## 검증 상태
 
-`HardwareApprovalGate`가 `codex_runner`의 `hardware_approval` 콜백을 채운다.
-**승인 결정과 아티팩트 해시가 둘 다 맞아야만** 통과다 — 사람이 이 job·이 계약·이 step에
-대해 granted했고, 그 아티팩트가 **지금 디스크에서 서명 당시 해시와 일치해야** 한다.
-아무것도 안 묶인 승인은 거부다: 설명에 한 서명은 비트스트림 두 개를 구별하지 못한다.
-상세: `docs/2026-08-21-agent-platform-p2-daemon.md`
+- 2026-10-01: 등록·탐색·선택·취소·시리얼 오류 기록과 기존 장비/대화/통신 관련 Python
+  테스트 201개 통과(113.05초). 프론트엔드 116개와 TypeScript/Vite production build 통과.
+  제거된 과거 계약 파일에 의존하던 wire 테스트 4개를 현재 mission/preflight 경로로
+  갱신했다. 전체 저장소 테스트를 모두 실행했다는 의미는 아니다.
+- 2026-10-01: 새 보드 선택이 실제 HTTP→데몬→작업 기록으로 전달되는 것과,
+  선택한 소스·지식 범위로 Lead→Builder→Verifier가 진행하고 장비 결과를 재사용하는
+  것을 모의 모델·장비로 확인했다. 다른 두 구성의 라우팅, 구성 변경 감지, 스코프 재사용도 검증했다.
+- 2026-10-01 17:12 KST: 새 탐색 코드를 실제 Windows 호스트에서 실행해 USB 장치 8개와
+  시리얼 포트 0개를 읽었다. USB 목록에는 카메라·저장장치 등 일반 주변장치도 포함된다.
+  이 결과를 개발 보드 모델 식별이나 기능 성공으로 취급하지 않았다. 장치 포트 개방,
+  프로그램 업로드, 실제 파형 측정은 하지 않았다. 운영 데몬·웹 서버는 재시작하지 않았다.
 
-**서비스 `orchestrator/service.py` · `control.py` · `runtime_events.py`** (신규) —
-데몬을 호스팅하는 프로세스. 단일 인스턴스는 **OS 파일 락**이다 (pid 파일은 자기를 낡게 만든
-크래시보다 오래 산다). 타이머는 고정 간격이 아니라 **스케줄러가 아는 마감에서 sleep을 파생**하고
-30초 상한을 둔다 — 파이프로 승인이 들어오면 남의 재시도 시계를 안 기다려야 하니까.
-제어 채널은 **named pipe** (`\\.\pipe\rtase-agent-daemon`). 고정 localhost
-포트는 브라우저 아무 페이지나 POST할 수 있다 — Connect AI에서 안 가져올 부분.
-`approve`는 **아무것도 인가하지 않는다.** 사람이 말한 걸 기록할 뿐이고 게이트가 다시 해시한다.
-`cancel`은 닫기 전에 미결 요청을 철회한다. `steer`는 로그에 남고 **다음 handoff가 전달 증거**다.
-Codex 알림은 `runtime.<method>`로 기록한다 — 이름은 런타임 것 그대로, 네임스페이스는 충돌 방지용.
-**증거가 아니라 관측이므로** 버퍼링한다: 크래시는 UI 애니메이션 꼬리를 잃지 보드에 대한 주장을
-잃지 않는다. 상세: `docs/2026-08-21-agent-platform-p2-service.md`
+- 2026-09-30: 선택 검사·역할 복귀·결과 재사용/재확인·취소·HTTP 전달 및 conversation
+  관련 Python 테스트 110개 통과. 프론트엔드 114개와 production build 통과.
+  모의 장비로 BBB 전용 요청이 스코프/CPLD를 호출하지 않는 것, 다른 역할과 재개된
+  작업이 기존 결과를 재사용하는 것, 소스 분석은 Hardware 모드에서도 접속 없이
+  완료하는 것을 검증했다. 이번 변경 검증은 실제 모델·실물 장비를 호출하지 않았다.
 
-**UI 배선 `orchestrator/wire.py`** (신규) — 오피스 UI 계약
-(`agent-platform/docs/platform-integration.md`) 구현. subscribe → ledger.event 재생 →
-ready → 같은 연결로 계속 push. `ready.cursor`는 **마지막으로 보낸 event_id와 항상 같다**
-(tip을 재생 *뒤에* 읽고 움직였으면 다시 비운다). `approval.decide`/`job.steer`/`job.cancel`은
-`commandId`를 달고 `command.result`로 답한다. 결정은 `accepted`/`declined` 단어이고
-**`ControlPlane.approve`는 진짜 JSON boolean만 받는다** — `bool("false")`가 True라서
-`"granted":"false"`가 승인으로 기록될 수 있었다.
+- 2026-09-28: 지난 초기화 정리와 데몬 관련 회귀 68개 통과. 연결 확인·conversation
+  실행 관련 49개와 HTTP→실제 로컬 데몬 연결 확인 테스트 1개 통과(장비 경계는 모의).
+  프론트엔드 114개와 production build 통과.
+- 2026-09-28 11:00 KST: 새 연결 확인 기능을 실물 대상으로 한 번 실행했다.
+  BBB `192.168.50.2:22`는 SSH 접속 시간 초과, 스코프 `192.168.50.3:5025`는
+  TCP 접속 시간 초과, CPLD `FTUSB-0`는 pgrcmd -5(케이블 없음)로 식별에 실패했다.
+  각각 `20260928T020022Z_connection_bbb`, `20260928T020039Z_connection_scope`,
+  `20260928T020044Z_connection_cpld`에 기록했다. 모두 미연결/식별 실패로 표시하며
+  기능 성공으로 처리하지 않았다. 프로그램 업로드·파형 측정은 수행하지 않았다.
+  운영 데몬과 웹 서버는 시작하지 않았다.
 
-파이프 보안을 명시했다: 현재 logon SID DACL `D:P(A;;GA;;;<SID>)`, `PIPE_REJECT_REMOTE_CLIENTS`,
-`FILE_FLAG_FIRST_PIPE_INSTANCE`. 첫 인스턴스를 `open()`에서 만들어 이름/권한 오류가
-**시작 시점에** 실패한다. 전송 계층 버그 하나 더: 동기 파이프 핸들은 I/O를 직렬화해서
-reader가 `ReadFile`에 블록돼 있으면 pusher의 `WriteFile`이 뒤에 줄 섰다 — `PeekNamedPipe`로
-읽기를 논블로킹으로 바꿔 해결. TCP에선 안 나타나던 문제다.
+- 2026-09-14: 시나리오 채널 지정·연결 피드백·역할 전달·장비 프로필 관련 회귀 105개 통과.
+  자연어·복수 채널 파서 보강 후 채널 설정 테스트 26개도 통과했다. 시나리오에서
+  CH3=RF1을 지정한 job이 추가 답변/승인 없이 모의 capture까지 완료되는 것을 검증했다.
+  실물 장비는 호출하지 않았다.
 
-steer 전달 경계 수정: reducer가 쓰는 `handoff.Verdict`가 **아무도 읽지 않은 steer를 소비**하고
-있었다. 이제 `handoff.Plan`/`handoff.StepResult`만 전달 증거다. reporter는 steering을
-지시로 받지 않고 `undelivered_steering`을 기록용 맥락으로 받는다.
+- 변경 모듈 Python compile 통과.
+- 작업공간 산출물 직접 실행, 연결 경계, 에이전트 정의 관련 오프라인 회귀 62개 통과.
+- conversation 경로의 Codex native web search를 live로 연결했다. 실제 모델로 AD9744
+  제조사 데이터시트를 검색·열고 URL과 문서 근거를 반환하는 smoke 검증을 통과했다.
+- 조사 근거는 원장에 누적해 역할 간 전달하고 최종 결과에 포함한다. 장비 접촉 전
+  입력 오류는 Builder로 돌려주며 일반 장비 예외는 자동 재실행하지 않는다.
+- 동일 Hardware job에서 조사 → 입력 수정 → 측정 실패 → Lead 설계 재검토 → 코드 수정 →
+  재측정 → Verifier 완료를 모의 모델·장비로 검증했다. 실제 모델과 실물 장비를 함께
+  사용한 전체 기능의 자율 개발 성공 여부는 다음 Hardware job에서 확인해야 한다.
+- 검색 런타임·대화 흐름·웹 scheduler·장비 연결·프로필 관련 회귀 83개 통과.
+  테스트용 Git commit의 자동 maintenance 지연 때문에 통합 검증 프로세스에는
+  `maintenance.auto=false`, `gc.auto=0`을 적용했다. 사용자 Git 설정은 변경하지 않았다.
+- 프론트엔드 113개 테스트와 production build 통과.
+- 하드웨어 프로필 로드 및 공개 장비 도구 5개 확인.
+- 실물 장비는 이 변경에서 호출하지 않았다. 다음 Hardware job으로 사용자가 검증한다.
 
-`orchestrator/pagination.py` (신규) — `limit=10_000`이 **가장 오래된** 1만 개를 읽고 있었다.
-런타임 이벤트가 곧 그 경계를 넘길 참이었다. 실행: `py -3 -m QKD_PROJ.orchestrator`.
-상세: `docs/2026-08-21-agent-platform-p2-service.md`
+## 운영 데이터
 
-외부 Node 브리지가 accept 루프를 죽인 보고(error 5)는 **여기서 재현되지 않았다** — Node 재연결
-8회·동시 4개·CLI 동시 접속 모두 통과. 그래도 그걸 가능하게 하던 구조는 없앴다:
-`FILE_FLAG_FIRST_PIPE_INSTANCE`를 가변 상태가 아니라 **파라미터**로 바꾸고, 생성 실패가 accept
-루프를 죽이지 않게 하고(죽으면 파이프 이름이 사라져 ENOENT가 영구화된다), **다음 인스턴스를
-넘겨주기 전에 미리 만들어** 아무것도 listening하지 않는 창을 없앴다. `tests/test_ui_bridge.py`가
-실제 `node` 프로세스로 회귀를 잡는다 — 같은 인터프리터 클라이언트는 GIL을 공유해서 이 계열
-버그를 통과시킨다.
-
-`willBeDelivered`는 이제 현재 iteration의 **Verdict outcome을 읽는다.** terminal이면 reporter만
-남고 reporter는 지시를 받지 않으므로 false다. iteration 상한도 배달을 끝낸다.
-
-`job.result`는 ready **뒤에** 보낸다 — 재생은 커서당 한 프레임이어야 하고 result는 커서가 아니다.
-내용은 하나도 저작되지 않는다: 카운트는 reducer 조건에 대한 산술, 요약은 outcome과 실패 필드명
-인용, **Verdict 원문과 그 해시**가 같이 간다. `artifact.registered`는 경로를 별도 프레임으로
-나르고, 존재·프로젝트 루트 내부를 확인한 것만 제공한다. 같은 id에 다른 경로는 거부한다.
-
-**BBB 진단** — gate9 계약의 allowlist 7개, 경로가 아니라 **내용 해시**로 고정.
-
-## 문서
-
-| 파일 | 내용 |
-|---|---|
-| `docs/2026-08-20-gpio-spi-verification-and-pru-dac-plan.md` | GPIO-SPI 검증 결과 + Gate 12 계획 + 아날로그 경로 |
-| `docs/2026-08-20-mcspi-rx-fault-elimination.md` | 무엇을 어떻게 배제했는가, 계측 함정 |
-| `docs/2026-08-21-agent-platform-p0-mcp-server.md` | 에이전트 플랫폼 P0~P4, MCP 서버 |
-| `docs/2026-08-21-agent-platform-p1-agent-definitions.md` | P1 루프, 4개 경계, P2가 채워야 할 구멍 |
-| `mcp_server/README.md` | 등록 방법, 도구 추가 방법 |
-| `agents/README.md` | 6개 에이전트, 종료 조건, 에이전트 추가 방법 |
-| `docs/2026-08-21-evidence-audit.md` | 계약 주장 ↔ run 기록 전수 대조 (자동 생성) |
-| `docs/2026-08-21-agent-platform-p2-job-ledger.md` | P2 원장 4테이블, 이벤트 종류, DB가 강제하는 불변조건 |
-| `docs/2026-08-21-agent-platform-p2-loop.md` | 루프 5단계, 정지 조건, 런타임 seam |
-| `docs/2026-08-21-agent-platform-p2-daemon.md` | 스케줄러, 정지 이유 3종, 하드웨어 승인 게이트 |
-| `docs/2026-08-21-agent-platform-p2-service.md` | 프로세스 수명, named pipe, 제어 명령, 런타임 이벤트 기록 |
-| `docs/evidence/gate10-*.json` | Gate 10 조건 명세와 그 판정 (`primary_run_missing`) |
-| `contracts/proposals/…gate10-evidence-gap.patch` | **적용하지 않은** 제안 diff. 사람이 서명한다 |
-| `contracts/proposals/…gate9-effect-class.patch` | 같음. 스크립트 7개의 read/mutate 분류 |
-| `../GATE1_REVIEW.md` | Gate 1 체크리스트와 승인 기록 |
-
-## 함정 (반복해서 물릴 것들)
-
-- `prj_project new`가 자기 LPF를 만들고 나중에 추가한 LPF를 `excluded="TRUE"`로 만든다.
-  → `build_cpld()`가 2단계로 회피 중.
-- `.twr`이 두 개고 `_lse.twr`은 가짜 200 MHz 기준이다 (422 errors vs 실제 0).
-- RTM3004은 Nx Single 무장 중에도 `ACQ:STAT?`에 `STOP`을 반환한다.
-- RTM3004 커플링 `DC`는 **50 Ω**, `DCLimit`가 1 MΩ다. 3.3 V 로직에 50 Ω를 걸면
-  없는 Low가 만들어진다.
-- 프로브 감쇠비가 스스로 바뀐다 (프로브 꽂으면 1:1 → 10:1).
-- 스코프가 `AUTO` 트리거면 트리거 없이도 촬영한다. `TIM:POS`가 프레임 밖이면 파형이
-  그럴듯하게 틀린다. 프레임 캡처는 `NORMal` + 프레임 크기 창으로.
-- `/dev/mem` `Bus error`는 권한이 아니라 **runtime PM 클럭 게이팅**이다.
-  `power/control=on` 후 읽고 원복.
-- Debian 13에서 `/proc/device-tree/ocp/spi@...` 고정 경로는 조용히 빈 출력을 낸다.
-  `readlink -f /sys/class/spi_master/spi0/device/of_node`로 해결.
-- 진단 스크립트의 종료 코드는 **"진단이 돌았는가"**여야 한다. DUT 판정을 종료 코드에
-  넣으면 정당한 음성 결과가 RunRecord에 도구 실패로 기록된다.
-- 보드 전원이 끊기면 CPLD SRAM 구성이 사라진다. BBB 재부팅 순서에 특히 주의.
-- `runs/`는 gitignore 대상. manifest의 해시로만 추적한다.
-
-## 검증 명령
-
-```powershell
-py -3 -m pytest QKD_PROJ/tests -q          # 625 passed, 1 failed (해시 불일치 가드)
-py -3 QKD_PROJ/mcp_server/server.py --list-tools
-py -3 -m QKD_PROJ.agents.export --check-only   # ok: 6 definitions, no problems
-py -3 -m QKD_PROJ.orchestrator.audit           # 계약 17 × run 85 대조
-```
-
-수치: 계약 17개 · 테스트 파일 28개 · 에이전트 6개 · run 기록 85개.
-감사 결과: **error 5 · warning 6 · note 63** (`docs/2026-08-21-evidence-audit.md`).
+`runs/`, `webui/state/web-jobs.db`, `workspaces/`, `references/`, `candidates/`는 보존한다.
+과거 계약 디렉터리와 49개 Gate/계약 파일은 제거했다. 필요한 장비 연결 정보와 현재
+GPIO-SPI SRAM 이미지는 RTASE V1 하드웨어 프로필로 옮겼다.

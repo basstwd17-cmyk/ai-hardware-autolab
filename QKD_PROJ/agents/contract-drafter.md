@@ -32,6 +32,14 @@ Set `execution_mode` to `hardware` if any proposed step observes or changes a
 real board or instrument, and set that step's `touches_hardware` to true. An
 offline draft may contain no such step.
 
+If the ArchitectureDecision status is `selected_with_constraints`, the draft
+must remain offline. Preserve each open question as a constraint with the exact
+form `unresolved:<question-id>: <what remains unknown and what later authority
+or measurement can resolve it>`. Do not add a step or pass criterion that
+depends on that unknown. Such a proposal may prepare code, simulation or a
+measurement recipe, but it cannot upload, program, energize or measure real
+hardware.
+
 For a non-RTASE board, use only a stage marked `ready` in
 `resources.board_development.selected.stages`. A generic profiled step uses
 `run_board_build` (offline design/build) or `run_board_stage`

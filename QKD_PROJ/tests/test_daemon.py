@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -101,6 +102,35 @@ def test_backoff_doubles_and_is_capped():
     policy = D.SchedulerPolicy(base_backoff_s=60, max_backoff_s=300)
     assert [policy.backoff_s(n) for n in (1, 2, 3, 4, 9)] == [60, 120, 240, 300, 300]
     assert policy.backoff_s(0) == 0
+
+
+def test_a_live_turn_is_active_not_runnable_or_interrupted(env):
+    ledger, _runs = env
+    job = start(ledger, "g.yaml", "hold one turn")
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingLoop:
+        def advance(self, job_id):
+            entered.set()
+            release.wait(timeout=2)
+            current = ledger.job(job_id)
+            return L.Advance(L.PLAN, job_id, current.iteration, "released")
+
+    daemon = D.Daemon(ledger, BlockingLoop())
+    worker = threading.Thread(target=daemon.tick)
+    worker.start()
+    assert entered.wait(timeout=1)
+    waiting = daemon.waiting_for(job.job_id)
+    assert waiting.status == D.ACTIVE
+    assert not waiting.runnable
+
+    from QKD_PROJ.orchestrator.control import ControlPlane
+
+    assert ControlPlane(ledger, daemon).job(job.job_id)["interrupted"] is False
+    release.set()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
 
 
 # -- the three ways to be stopped are three ----------------------------------

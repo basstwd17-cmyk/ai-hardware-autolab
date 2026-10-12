@@ -27,6 +27,8 @@ class KnowledgeContext:
             "claims": [
                 {
                     "claim_id": claim.claim_id,
+                    "version_id": claim.version_id,
+                    "scope": claim.candidate.scope.to_dict(),
                     "status": claim.status,
                     "statement": claim.candidate.statement,
                     "subject": claim.candidate.subject.to_dict(),
@@ -36,6 +38,9 @@ class KnowledgeContext:
                         {
                             "kind": evidence.kind,
                             "locator": evidence.locator,
+                            "sha256": evidence.sha256,
+                            "json_pointer": evidence.json_pointer,
+                            "value_sha256": evidence.value_sha256,
                             "page": evidence.page,
                             "role": evidence.role,
                         }

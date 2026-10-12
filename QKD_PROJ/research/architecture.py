@@ -27,7 +27,12 @@ from .models import (
 )
 
 
-ARCHITECTURE_STATUSES = ("selected", "needs_research", "not_feasible")
+ARCHITECTURE_STATUSES = (
+    "selected",
+    "selected_with_constraints",
+    "needs_research",
+    "not_feasible",
+)
 EXECUTION_MODES = ("offline", "hardware")
 REVIEW_OUTCOMES = ("ready_for_human_review", "revise", "rejected")
 FINDING_SEVERITIES = ("info", "warning", "error")
@@ -159,7 +164,16 @@ class ArchitectureDecision:
                 raise ResearchValidationError(
                     "ArchitectureDecision cannot be selected while SourcePacket questions are open"
                 )
-        if self.status == "selected" and not self.decisions:
+            if self.status == "selected_with_constraints":
+                if not packet.open_questions:
+                    raise ResearchValidationError(
+                        "selected_with_constraints requires at least one open SourcePacket question"
+                    )
+                if set(self.open_questions) != set(packet.open_questions):
+                    raise ResearchValidationError(
+                        "selected_with_constraints must preserve every open SourcePacket question"
+                    )
+        if self.status in ("selected", "selected_with_constraints") and not self.decisions:
             raise ResearchValidationError("a selected architecture needs at least one decision")
 
     def to_dict(self) -> dict[str, Any]:
@@ -386,12 +400,30 @@ class ContractDraft:
         self, decision: ArchitectureDecision | None, packet: SourcePacket | None
     ) -> None:
         if decision is not None:
-            if decision.status != "selected":
+            if decision.status not in ("selected", "selected_with_constraints"):
                 raise ResearchValidationError("a ContractDraft requires a selected architecture")
             if self.scenario_sha256 != decision.scenario_sha256:
                 raise ResearchValidationError("ContractDraft belongs to a different scenario")
             if self.architecture_id != decision.architecture_id:
                 raise ResearchValidationError("ContractDraft names a different architecture")
+            if decision.status == "selected_with_constraints":
+                if self.execution_mode != "offline":
+                    raise ResearchValidationError(
+                        "an architecture with unresolved questions may only produce an offline draft"
+                    )
+                missing_constraints = [
+                    question
+                    for question in decision.open_questions
+                    if not any(
+                        item.casefold().startswith(f"unresolved:{question}:")
+                        for item in self.constraints
+                    )
+                ]
+                if missing_constraints:
+                    raise ResearchValidationError(
+                        "an architecture with unresolved questions must preserve them as "
+                        f"unresolved:<question-id>: constraints; missing {missing_constraints}"
+                    )
         if packet is not None:
             known = {item.claim_id for item in packet.claims}
             unknown = set(self.evidence_claim_ids) - known

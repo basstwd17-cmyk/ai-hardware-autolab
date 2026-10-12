@@ -32,10 +32,11 @@ def _utc_run_stamp() -> str:
 
 
 class RunRecord:
-    def __init__(self, name: str, gate: SafetyGate, runs_dir: Path = RUNS_DIR) -> None:
+    def __init__(self, name: str, gate: SafetyGate | None, runs_dir: Path = RUNS_DIR, *, hardware_setup=None) -> None:
         stamp = _utc_run_stamp()
         self.name = name
         self.gate = gate
+        self.hardware_setup = hardware_setup
         runs_dir = Path(runs_dir)
 
         # mkdir(exist_ok=False) is the arbiter, rather than a preceding
@@ -101,8 +102,8 @@ class RunRecord:
             "started_at": self.started_at,
             "updated_at": utc_now(),
             "verdict": self.verdict,
-            "contract": self.gate.describe(),
-            "pass_criteria": self.gate.pass_criteria(),
+            **({"hardware_setup": self.hardware_setup} if self.hardware_setup is not None else
+               {"contract": self.gate.describe(), "pass_criteria": self.gate.pass_criteria()}),
             "steps": [r.to_dict() for r in self.results],
             "artifacts": [
                 asdict(a) for r in self.results for a in r.artifacts

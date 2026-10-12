@@ -56,7 +56,9 @@ from QKD_PROJ.orchestrator import wire as W
 
 # The scheduler statuses that mean a job is still somebody's problem. Anything
 # else -- finished, and whatever the scheduler adds later -- empties the desk.
-OPEN_STATUSES = frozenset({"runnable", "waiting_approval", "waiting_retry", "waiting_person"})
+OPEN_STATUSES = frozenset(
+    {"active", "runnable", "waiting_approval", "waiting_retry", "waiting_person"}
+)
 
 # Job states, for the shape of `status.jobs` that has no scheduler in front of
 # it. `Job.state` is the ledger column; these are the ones still in play.
@@ -153,7 +155,8 @@ class OfficeProjection:
             if event_id > self._cursor:
                 self._cursor = event_id
 
-            if agent.lower() in NOT_AN_AGENT:
+            kind = _text(event.get("kind"))
+            if agent.lower() in NOT_AN_AGENT or not kind.startswith(("runtime.", "handoff.", "conversation.turn.")) or kind == "handoff.Brief":
                 # A person, or the platform itself. No desk.
                 return self._revision != before
 
@@ -165,7 +168,12 @@ class OfficeProjection:
                 self._revision += 1
 
             kind = _text(event.get("kind"))
-            if kind.startswith("runtime."):
+            if kind.startswith("conversation.turn."):
+                if kind == "conversation.turn.completed":
+                    occupant.turns += 1
+                self._set(occupant, TYPING if kind == "conversation.turn.started" else WAITING,
+                          "working" if kind == "conversation.turn.started" else "turn ended", event_id)
+            elif kind.startswith("runtime."):
                 self._animate(occupant, event, event_id)
             elif kind.startswith("handoff."):
                 # A turn boundary. It is *not* read as success or completion --
@@ -188,6 +196,18 @@ class OfficeProjection:
             for key in [k for k, o in self._occupants.items() if o.job_id not in self._open]:
                 del self._occupants[key]
                 self._revision += 1
+            jobs = snapshot.get("jobs", {})
+            waiting = set()
+            if isinstance(jobs, dict):
+                for state, rows in jobs.items():
+                    if state not in {"active", "runnable", "running"}:
+                        waiting.update(row.get("job_id") for row in rows or [] if isinstance(row, dict))
+            elif isinstance(jobs, list):
+                waiting = {row.get("job_id") for row in jobs if isinstance(row, dict)
+                           and (row.get("state") or row.get("status")) in {"blocked", "awaiting_approval"}}
+            for occupant in self._occupants.values():
+                if occupant.job_id in waiting:
+                    self._set(occupant, WAITING, "job waiting", occupant.seen_at)
             return self._revision != before
 
     def reset(self) -> None:

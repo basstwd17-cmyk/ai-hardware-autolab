@@ -21,6 +21,14 @@ electrical safety or verification method, return `needs_research`. Never fill a
 missing number from memory. Use `not_feasible` only when cited facts conflict
 with a hard scenario requirement. Otherwise return `selected`.
 
+When `research_resolution` is present, two consecutive research rounds have
+produced no new evidence. You must not return `needs_research`. Return
+`selected_with_constraints` only when the known evidence is sufficient for a
+useful **offline-only** design or simulation proposal; preserve every
+SourcePacket open question unchanged in `open_questions`. Return
+`not_feasible` when any missing fact is essential even to that offline work.
+This does not authorize hardware and does not convert an unknown into a fact.
+
 The selected architecture must address every `changed`, `missing`, or
 `conflict` finding explicitly. It may use only execution agents selected by
 the MissionPlan; proposing a broader role belongs in a new mission plan.

@@ -15,10 +15,43 @@ from QKD_PROJ.orchestrator.campaign_proposal import CampaignProposalService
 from QKD_PROJ.orchestrator.control import ControlPlane
 from QKD_PROJ.orchestrator.jobs import JobLedger
 from QKD_PROJ.orchestrator.loop import start
+from QKD_PROJ.orchestrator.simple_mission import start_simple_mission
 from QKD_PROJ.research.discovery_loop import start_mission
 
 
 NOW = "2026-09-01T01:00:00+00:00"
+
+
+def test_catalog_uses_current_hardware_jobs_not_historical_result_cards(tmp_path: Path):
+    ledger, legacy, controller = _environment(tmp_path)
+    control = ControlPlane(ledger, campaign_controller=controller)
+    pending, _ = start_simple_mission(ledger, "prepare", "prepare scope", resources={"execution_mode": "hardware"})
+    stopped, _ = start_simple_mission(ledger, "stopped", "old scope", resources={"execution_mode": "hardware"})
+    offline, _ = start_simple_mission(ledger, "offline", "offline build")
+    ledger.transition(stopped.job_id, J.DONE, "cancelled")
+
+    rows = control.campaign_catalog()["candidates"]
+    assert {row["job_id"] for row in rows} == {legacy.job_id, pending.job_id}
+    assert rows[0]["job_id"] == legacy.job_id  # legacy continuation still supported
+    waiting = next(row for row in rows if row["job_id"] == pending.job_id)
+    assert waiting["preview_available"] is False
+    assert "계획" in waiting["detail"]
+
+    ledger.transition(pending.job_id, J.RUNNING)
+    ledger.begin_iteration(pending.job_id)
+    ledger.record_handoff(pending.job_id, "Plan", "lead-agent", {
+        "kind": "Plan", "agent": "lead-agent", "steps": [
+            {"id": "measure", "tool": "measure_board_scope", "touches_hardware": True}
+        ],
+    })
+    rows = control.campaign_catalog()["candidates"]
+    planned = next(row for row in rows if row["job_id"] == pending.job_id)
+    assert planned["preview_available"] is True
+    assert planned["revision"] != waiting["revision"]
+    # An older hardware Plan must not enable approval in a new iteration.
+    ledger.begin_iteration(pending.job_id)
+    rows = control.campaign_catalog()["candidates"]
+    assert next(row for row in rows if row["job_id"] == pending.job_id)["preview_available"] is False
 
 
 def _environment(tmp_path: Path):
@@ -78,6 +111,38 @@ def _environment(tmp_path: Path):
     scenario = "Upload firmware to the example board and measure OUT."
     contract_data = {
         "test_id": "generated-example",
+        "status": "reviewed_generated_hardware",
+        "hardware_safety": {
+            "limits": [
+                {
+                    "subject": "example-board I/O",
+                    "parameter": "voltage",
+                    "maximum": 3.3,
+                    "unit": "V",
+                    "source": "Official data sheet",
+                },
+                {
+                    "subject": "example-board supply",
+                    "parameter": "current",
+                    "maximum": 0.5,
+                    "unit": "A",
+                    "source": "Official data sheet",
+                },
+            ],
+            "pin_assignments": [
+                {
+                    "board": "example-board",
+                    "pin": "OUT",
+                    "signal": "OUT",
+                    "direction": "output",
+                    "source": "board-map.yaml",
+                }
+            ],
+            "scope_channels": [
+                {"channel": 1, "signal": "OUT", "termination": "1MOhm"}
+            ],
+            "stop_conditions": ["stop on over-current or unexpected voltage"],
+        },
         "board_profile": {
             "board_id": "example-board", "revision": "v1",
             "path": profile_path.relative_to(tmp_path).as_posix(),

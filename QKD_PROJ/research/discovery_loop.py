@@ -9,6 +9,7 @@ no position.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Callable, Sequence
 
 from QKD_PROJ.agents.schema import AgentDefinition, load_all, validate_handoff
@@ -34,6 +35,7 @@ RESEARCH_PLAN = "research_plan"
 RESEARCH = "research"
 CHANGE = "change_analysis"
 ARCHITECTURE = "architecture"
+RESOLVE_RESEARCH_STALL = "resolve_research_stall"
 DRAFT = "contract_draft"
 REVIEW = "contract_review"
 DECIDE = "decide"
@@ -51,6 +53,152 @@ class DiscoveryPhase:
     handoff_kind: str | None = None
 
 
+@dataclass(frozen=True)
+class ResearchProgress:
+    """Evidence gain across cumulative SourcePackets.
+
+    Search queries are deliberately absent: a differently worded query is not
+    evidence.  A round advances the investigation only when it contributes a
+    selected document, a new/revised cited claim, or actually answers a
+    previously open question.
+    """
+
+    rounds: int
+    stagnant_rounds: int
+    new_document_ids: tuple[str, ...] = ()
+    new_claim_ids: tuple[str, ...] = ()
+    revised_claim_ids: tuple[str, ...] = ()
+    resolved_question_ids: tuple[str, ...] = ()
+
+    @property
+    def stalled(self) -> bool:
+        return self.is_stalled()
+
+    def is_stalled(self, limit: int = 2) -> bool:
+        return self.stagnant_rounds >= limit
+
+    def to_dict(self, stall_limit: int = 2) -> dict[str, Any]:
+        return {
+            "rounds": self.rounds,
+            "stagnant_rounds": self.stagnant_rounds,
+            "stall_limit": stall_limit,
+            "stalled": self.is_stalled(stall_limit),
+            "latest_delta": {
+                "new_document_ids": list(self.new_document_ids),
+                "new_claim_ids": list(self.new_claim_ids),
+                "revised_claim_ids": list(self.revised_claim_ids),
+                "resolved_question_ids": list(self.resolved_question_ids),
+            },
+        }
+
+
+def research_progress(packets: Sequence[SourcePacket]) -> ResearchProgress:
+    """Return the trailing no-new-evidence streak and latest useful delta."""
+
+    if not packets:
+        return ResearchProgress(0, 0)
+    stagnant = 0
+    latest = ResearchProgress(len(packets), 0)
+    for previous, current in zip(packets, packets[1:]):
+        previous_documents = {
+            citation.document_id
+            for claim in previous.claims
+            for citation in claim.citations
+        }
+        current_documents = {
+            citation.document_id
+            for claim in current.claims
+            for citation in claim.citations
+        }
+        previous_claims = {item.claim_id: item for item in previous.claims}
+        current_claims = {item.claim_id: item for item in current.claims}
+        answered = {item.question_id for item in current.claims}
+        new_documents = tuple(sorted(current_documents - previous_documents))
+        new_claims = tuple(sorted(set(current_claims) - set(previous_claims)))
+        revised_claims = tuple(
+            sorted(
+                claim_id
+                for claim_id in set(current_claims) & set(previous_claims)
+                if current_claims[claim_id] != previous_claims[claim_id]
+            )
+        )
+        resolved = tuple(
+            sorted(
+                (set(previous.open_questions) - set(current.open_questions))
+                & answered
+            )
+        )
+        useful = bool(new_documents or new_claims or revised_claims or resolved)
+        stagnant = 0 if useful else stagnant + 1
+        latest = ResearchProgress(
+            len(packets),
+            stagnant,
+            new_documents,
+            new_claims,
+            revised_claims,
+            resolved,
+        )
+    return latest
+
+
+def _normalize_query(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().casefold())
+
+
+def _question_route(question: Any) -> str:
+    """Route a question to its authority instead of sending everything to web."""
+
+    text = " ".join(
+        [
+            question.question_id,
+            question.question,
+            question.why,
+            *question.required_source_types,
+        ]
+    ).casefold()
+    if any(
+        marker in text
+        for marker in (
+            "campaign",
+            "approval",
+            "authorization",
+            "원장",
+            "승인",
+            "캠페인",
+            "platform-policy",
+            "web inbox",
+        )
+    ):
+        return "platform_policy"
+    if any(
+        marker in text
+        for marker in (
+            "repository",
+            "source-code",
+            "existing code",
+            "existing contract",
+            "run-evidence",
+            "저장소",
+            "기존 코드",
+            "기존 계약",
+        )
+    ):
+        return "repository_source"
+    if any(
+        marker in text
+        for marker in (
+            "bench",
+            "measurement-required",
+            "physical measurement",
+            "scope capture",
+            "실측",
+            "측정 필요",
+        )
+    ):
+        return "measurement_required"
+    return "external_source"
+
+
 class DiscoveryLoop:
     """Advance a contract-gap job from question to reviewed proposal."""
 
@@ -64,6 +212,8 @@ class DiscoveryLoop:
         knowledge_scope: KnowledgeScope | None = None,
         classify_failure: Callable[[BaseException], str] = L.default_failure_classifier,
         max_handoff_retries: int = 2,
+        max_research_rounds: int | None = None,
+        max_stagnant_research_rounds: int = 2,
     ) -> None:
         self.ledger = ledger
         self.runner = runner
@@ -74,6 +224,16 @@ class DiscoveryLoop:
         if max_handoff_retries < 0:
             raise DiscoveryLoopError("max_handoff_retries cannot be negative")
         self.max_handoff_retries = max_handoff_retries
+        if max_research_rounds is not None and max_research_rounds < 1:
+            raise DiscoveryLoopError("max_research_rounds must be at least one")
+        # Normal missions have no arbitrary research-round ceiling.  They stop
+        # when the architecture is selected, found infeasible, or a real
+        # runtime/failure-signature rule blocks progress.  A finite value is
+        # retained only as an explicit test/embedding policy override.
+        self.max_research_rounds = max_research_rounds
+        if max_stagnant_research_rounds < 1:
+            raise DiscoveryLoopError("max_stagnant_research_rounds must be at least one")
+        self.max_stagnant_research_rounds = max_stagnant_research_rounds
         for name in (
             "mission-architect",
             "change-analyst",
@@ -107,11 +267,15 @@ class DiscoveryLoop:
         if job.state in (J.BLOCKED, J.AWAITING_APPROVAL):
             return DiscoveryPhase(L.BLOCKED)
         mission = self._is_mission(job_id)
-        if mission and not self.ledger.handoffs(job_id, "MissionPlan", 0):
+        plans = self.ledger.handoffs(
+            job_id, "MissionPlan" if mission else "ResearchPlan", 0
+        )
+        if mission and not plans:
             return DiscoveryPhase(MISSION_PLAN, "MissionPlan")
-        if not mission and not self.ledger.handoffs(job_id, "ResearchPlan", 0):
+        if not mission and not plans:
             return DiscoveryPhase(RESEARCH_PLAN, "ResearchPlan")
-        if not self.ledger.handoffs(job_id, "SourcePacket", 0):
+        packets = self.ledger.handoffs(job_id, "SourcePacket", 0)
+        if not packets or (mission and len(packets) < len(plans)):
             return DiscoveryPhase(RESEARCH, "SourcePacket")
         mission_plan = self._mission(job_id) if mission else None
         # There is no honest "change from baseline" for a new board or design
@@ -120,14 +284,32 @@ class DiscoveryLoop:
         if (
             mission_plan is not None
             and mission_plan.baseline_contract is not None
-            and not self.ledger.handoffs(job_id, "ChangeAnalysis", 0)
+            and len(self.ledger.handoffs(job_id, "ChangeAnalysis", 0)) < len(packets)
         ):
             return DiscoveryPhase(CHANGE, "ChangeAnalysis")
         decisions = self.ledger.handoffs(job_id, "ArchitectureDecision", 0)
-        if not decisions:
+        if len(decisions) < len(packets):
             return DiscoveryPhase(ARCHITECTURE, "ArchitectureDecision")
-        decision = ArchitectureDecision.parse(decisions[-1].payload)
-        if decision.status != "selected":
+        plan = self._plan(job_id)
+        packet = self._packet(job_id, plan)
+        decision = ArchitectureDecision.parse(
+            decisions[-1].payload, plan=plan, packet=packet
+        )
+        progress = self._research_progress(job_id)
+        if (
+            decision.status == "needs_research"
+            and progress.stagnant_rounds >= self.max_stagnant_research_rounds
+        ):
+            if decisions[-1].step_id != "research-stalled-resolution":
+                return DiscoveryPhase(RESOLVE_RESEARCH_STALL, "ArchitectureDecision")
+            return DiscoveryPhase(DECIDE)
+        research_allowed = (
+            self.max_research_rounds is None
+            or len(packets) < self.max_research_rounds
+        )
+        if decision.status == "needs_research" and research_allowed:
+            return DiscoveryPhase(MISSION_PLAN if mission else RESEARCH)
+        if decision.status not in ("selected", "selected_with_constraints"):
             return DiscoveryPhase(DECIDE)
         if self._board_gap(job_id) is not None:
             # Research may identify an architecture for a new board, but a
@@ -174,6 +356,8 @@ class DiscoveryLoop:
             return self._change(job)
         if phase.name == ARCHITECTURE:
             return self._architecture(job)
+        if phase.name == RESOLVE_RESEARCH_STALL:
+            return self._architecture(job, resolve_stall=True)
         if phase.name == DRAFT:
             return self._draft(job)
         if phase.name == REVIEW:
@@ -253,6 +437,26 @@ class DiscoveryLoop:
             ),
             "steering": self._steering(job.job_id),
         }
+        prior_plans = self.ledger.handoffs(job.job_id, "MissionPlan", 0)
+        round_number = len(prior_plans) + 1
+        prior_packets = self.ledger.handoffs(job.job_id, "SourcePacket", 0)
+        prior_decisions = self.ledger.handoffs(job.job_id, "ArchitectureDecision", 0)
+        if prior_plans:
+            task["supervisor_feedback"] = {
+                "research_round": round_number,
+                "previous_mission_plan": prior_plans[-1].payload,
+                "previous_source_packet": (
+                    prior_packets[-1].payload if prior_packets else None
+                ),
+                "architecture_feedback": (
+                    prior_decisions[-1].payload if prior_decisions else None
+                ),
+                "instruction": (
+                    "Revise only the bounded questions and materials needed to close the "
+                    "named gaps. Preserve the original scenario, execution boundary, search "
+                    "policy, baseline authority and available agent/tool registry."
+                ),
+            }
         result = self._call(
             job,
             "mission-architect",
@@ -273,7 +477,14 @@ class DiscoveryLoop:
             return result
         if result.scenario_sha256 != digest:
             return self._invalid(job, "MissionPlan belongs to a different scenario")
-        recorded = self._record(job, result.kind, result.agent, result.to_dict(), MISSION_PLAN)
+        recorded = self._record(
+            job,
+            result.kind,
+            result.agent,
+            result.to_dict(),
+            MISSION_PLAN,
+            step_id=f"research-round-{round_number}",
+        )
         try:
             extension = derive_extension_plan(result, resources)
         except ValueError as exc:
@@ -289,25 +500,63 @@ class DiscoveryLoop:
             problem = self._ingest_mission(job, mission)
             if problem is not None:
                 return problem
+        packets = self.ledger.handoffs(job.job_id, "SourcePacket", 0)
+        decisions = self.ledger.handoffs(job.job_id, "ArchitectureDecision", 0)
+        round_number = len(packets) + 1
+        parsed_packets = [SourcePacket.parse(row.payload) for row in packets]
+        seen_queries = sorted(
+            {
+                _normalize_query(query.query)
+                for packet in parsed_packets
+                for query in packet.queries
+            }
+        )
+        seen_documents = sorted(
+            {document.document_id for packet in parsed_packets for document in packet.documents}
+        )
+        seen_claims = sorted(
+            {claim.claim_id for packet in parsed_packets for claim in packet.claims}
+        )
+        task = {
+            "kind": "ResearchTask",
+            "job_id": job.job_id,
+            "scenario": scenario,
+            "scenario_sha256": digest,
+            "research_round": round_number,
+            "research_plan": plan.to_dict(),
+            **({"mission_plan": mission.to_dict()} if mission is not None else {}),
+            **({"previous_source_packet": packets[-1].payload} if packets else {}),
+            **({"architecture_feedback": decisions[-1].payload} if decisions else {}),
+            "resources": resources,
+            "question_routes": [
+                {"id": item.question_id, "route": _question_route(item)}
+                for item in plan.questions
+            ],
+            "research_history": {
+                "normalized_queries": seen_queries,
+                "document_ids": seen_documents,
+                "claim_ids": seen_claims,
+                "progress": research_progress(parsed_packets).to_dict(),
+            },
+            "steering": self._steering(job.job_id),
+        }
         result = self._call(
             job,
             "researcher",
-            {
-                "kind": "ResearchTask",
-                "job_id": job.job_id,
-                "scenario": scenario,
-                "scenario_sha256": digest,
-                "research_plan": plan.to_dict(),
-                **({"mission_plan": mission.to_dict()} if mission is not None else {}),
-                "resources": resources,
-                "steering": self._steering(job.job_id),
-            },
+            task,
             lambda value: SourcePacket.parse(value, plan=plan),
             "collecting sources",
         )
         if isinstance(result, L.Advance):
             return result
-        return self._record(job, result.kind, result.agent, result.to_dict(), RESEARCH)
+        return self._record(
+            job,
+            result.kind,
+            result.agent,
+            result.to_dict(),
+            RESEARCH,
+            step_id=f"research-round-{round_number}",
+        )
 
     def _change(self, job: J.Job) -> L.Advance:
         scenario, digest, resources = self._inputs(job.job_id)
@@ -336,9 +585,17 @@ class DiscoveryLoop:
         )
         if isinstance(result, L.Advance):
             return result
-        return self._record(job, result.kind, result.agent, result.to_dict(), CHANGE)
+        round_number = len(self.ledger.handoffs(job.job_id, "SourcePacket", 0))
+        return self._record(
+            job,
+            result.kind,
+            result.agent,
+            result.to_dict(),
+            CHANGE,
+            step_id=f"research-round-{round_number}",
+        )
 
-    def _architecture(self, job: J.Job) -> L.Advance:
+    def _architecture(self, job: J.Job, *, resolve_stall: bool = False) -> L.Advance:
         scenario, digest, resources = self._inputs(job.job_id)
         plan = self._plan(job.job_id)
         packet = self._packet(job.job_id, plan)
@@ -356,27 +613,58 @@ class DiscoveryLoop:
             problem = self._ingest_change(job, analysis)
             if problem is not None:
                 return problem
+        architecture_task = {
+            "kind": "ArchitectureTask",
+            "job_id": job.job_id,
+            "scenario": scenario,
+            "scenario_sha256": digest,
+            "research_plan": plan.to_dict(),
+            "source_packet": packet.to_dict(),
+            **({"mission_plan": mission.to_dict()} if mission is not None else {}),
+            **({"change_analysis": analysis.to_dict()} if analysis is not None else {}),
+            "knowledge_context": resources.get("knowledge_context"),
+            "steering": self._steering(job.job_id),
+        }
+        if resolve_stall:
+            architecture_task["research_resolution"] = {
+                **self._research_progress(job.job_id).to_dict(
+                    self.max_stagnant_research_rounds
+                ),
+                "instruction": (
+                    "Research has produced no new evidence for two consecutive rounds. "
+                    "Do not request more research. Select an offline architecture with every "
+                    "remaining question preserved as a contract constraint, or return "
+                    "not_feasible when the missing fact is essential even for offline work."
+                ),
+            }
         result = self._call(
             job,
             "architecture-selector",
-            {
-                "kind": "ArchitectureTask",
-                "job_id": job.job_id,
-                "scenario": scenario,
-                "scenario_sha256": digest,
-                "research_plan": plan.to_dict(),
-                "source_packet": packet.to_dict(),
-                **({"mission_plan": mission.to_dict()} if mission is not None else {}),
-                **({"change_analysis": analysis.to_dict()} if analysis is not None else {}),
-                "knowledge_context": resources.get("knowledge_context"),
-                "steering": self._steering(job.job_id),
-            },
+            architecture_task,
             lambda value: ArchitectureDecision.parse(value, plan=plan, packet=packet),
             "selecting an architecture",
         )
         if isinstance(result, L.Advance):
             return result
-        return self._record(job, result.kind, result.agent, result.to_dict(), ARCHITECTURE)
+        if resolve_stall and result.status not in ("selected_with_constraints", "not_feasible"):
+            return self._invalid(
+                job,
+                "a stalled-research resolution must select an offline constrained architecture "
+                "or end as not_feasible",
+            )
+        round_number = len(self.ledger.handoffs(job.job_id, "SourcePacket", 0))
+        return self._record(
+            job,
+            result.kind,
+            result.agent,
+            result.to_dict(),
+            ARCHITECTURE,
+            step_id=(
+                "research-stalled-resolution"
+                if resolve_stall
+                else f"research-round-{round_number}"
+            ),
+        )
 
     def _draft(self, job: J.Job) -> L.Advance:
         scenario, digest, resources = self._inputs(job.job_id)
@@ -473,8 +761,19 @@ class DiscoveryLoop:
         decisions = self.ledger.handoffs(job.job_id, "ArchitectureDecision", 0)
         decision = ArchitectureDecision.parse(decisions[-1].payload)
         reviews = self.ledger.handoffs(job.job_id, "ContractReview", 0)
-        if decision.status != "selected":
-            reason = f"architecture ended as {decision.status}; research or scope must change"
+        if decision.status not in ("selected", "selected_with_constraints"):
+            rounds = len(self.ledger.handoffs(job.job_id, "SourcePacket", 0))
+            suffix = (
+                f" after the explicit {rounds}-round research ceiling was reached"
+                if decision.status == "needs_research"
+                and self.max_research_rounds is not None
+                else ""
+            )
+            questions = ", ".join(decision.open_questions)
+            reason = (
+                f"architecture ended as {decision.status}{suffix}; "
+                f"unresolved: {questions or 'scope or feasibility'}"
+            )
         elif self._board_gap(job.job_id) is not None:
             reason = self._board_gap(job.job_id) or "board adapter is not ready"
         elif self._is_mission(job.job_id) and self._mission(job.job_id).contract_action == "reuse":
@@ -484,7 +783,12 @@ class DiscoveryLoop:
             problem = self._ingest_named(job, "ingest_contract_review", review)
             if problem is not None:
                 return problem
-            reason = (
+            prefix = (
+                "offline constrained proposal; "
+                if decision.status == "selected_with_constraints"
+                else ""
+            )
+            reason = prefix + (
                 "contract proposal is ready for a person's review"
                 if review.outcome == "ready_for_human_review"
                 else f"contract proposal review ended as {review.outcome}"
@@ -579,9 +883,11 @@ class DiscoveryLoop:
         agent: str,
         payload: dict[str, Any],
         action: str,
+        *,
+        step_id: str = "",
     ) -> L.Advance:
         handoff = self.ledger.record_handoff(
-            job.job_id, kind, agent, payload, iteration=0
+            job.job_id, kind, agent, payload, iteration=0, step_id=step_id
         )
         return L.Advance(action, job.job_id, 0, f"recorded {kind}", handoff.handoff_id)
 
@@ -676,6 +982,13 @@ class DiscoveryLoop:
             self.ledger.handoffs(job_id, "SourcePacket", 0)[-1].payload,
             plan=plan,
         )
+
+    def _research_progress(self, job_id: str) -> ResearchProgress:
+        packets = [
+            SourcePacket.parse(row.payload)
+            for row in self.ledger.handoffs(job_id, "SourcePacket", 0)
+        ]
+        return research_progress(packets)
 
     def _decision(
         self, job_id: str, plan: ResearchPlan, packet: SourcePacket

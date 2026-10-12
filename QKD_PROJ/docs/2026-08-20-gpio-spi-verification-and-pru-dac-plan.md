@@ -58,7 +58,7 @@ U6 IOUTA --DAC1_OUT--> U5 THS3491 --49.9 ohm--> RF1
 
 The `LDAC.A` name belongs to the project control net. U6 is an AD9744 and has no LDAC pin; its output data updates on the rising edge of `D1CLK` (U6 pin 28). The AD9744 needs data stable for at least 2 ns before and 1.5 ns after that edge, and has a 1.5 ns minimum clock pulse width. A PRU-generated 20 ns pulse is therefore suitable only when the selection is set and held before the pulse.
 
-The schematic uses U6/U1 AD9744 14-bit current-output DACs, with `2 kohm` full-scale resistors. U5/U7 are THS3491 amplifiers on CN1 `+15 V/GND/-15 V` rails. The channel-A feedback values (576 ohm and 63.4 ohm) give approximately `1 + 576/63.4 = 10.1 V/V`; RF1 has a 49.9 ohm series output resistor and must be characterized into a 50 ohm load.
+The schematic uses U6/U1 AD9744 14-bit current-output DACs, with `2 kohm` full-scale resistors. U5/U7 are THS3491 amplifiers on CN1 `+15 V/GND/-15 V` rails, limited to 15 V magnitude on either rail. The channel-A feedback values (576 ohm and 63.4 ohm) give approximately `1 + 576/63.4 = 10.1 V/V`; RF1 has a 49.9 ohm series output resistor (nominal 50 ohm SMA source network). For the current RTM3004 campaign the scope input remains DCLimit / 1 Mohm; the 50 ohm source value is not a 50 ohm scope-input setting. The CN1 current limit remains unverified and must not be invented from the separate 5 V board-supply limit.
 
 There is no firmware shutdown boundary for the analog hardware:
 
@@ -149,7 +149,7 @@ The 100 ns margin deliberately exceeds the DAC's few-nanosecond requirement and 
 | --- | --- | --- | --- |
 | Digital timing | CN1 disconnected; DAC/amp status recorded | `SYM.A0`, `SYM.A1`, P9_31, D1CLK, and representative D1B bits | Selection not stable before D1CLK, wrong pin placement, or any D2 output |
 | DAC code response | Gate12 digital timing passed; CN1 still disconnected | Controlled low-delta code steps and DAC1_OUT behavior | Unexpected DAC1_OUT level/current or board heating |
-| RF1 bring-up | Explicit approval; U5 installed; CN1 rails verified; RF1 has 50 ohm load | RF1 amplitude, settling, overshoot, supply current | Current limit, rail droop, abnormal temperature, unexpected RF1 amplitude |
+| RF1 bring-up | Explicit approval; U5 installed; CN1 rails verified; RTM3004 input is 1 Mohm | RF1 amplitude, settling, overshoot, supply current | Current limit, rail droop, abnormal temperature, unexpected RF1 amplitude |
 | Automated run | All earlier gates passed | code write/readback, PRU run, scope capture, immutable run record | Any preflight or post-run check fails |
 
 The first analog test must use small, non-calibration code differences chosen only after confirming the U6 MODE state and the measured DAC1_OUT baseline. Do not begin with `0x3FFF` or infer RF voltage directly from a raw DAC code.

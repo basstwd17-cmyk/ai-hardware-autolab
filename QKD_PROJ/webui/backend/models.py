@@ -272,6 +272,7 @@ class AgentProfile(Strict):
     """The reviewable, non-prompt half of one runtime agent definition."""
 
     name: str
+    team: str = Field(description="one of the seven user-facing agent teams")
     role: str
     description: str
     mcpTools: list[str]

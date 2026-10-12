@@ -35,6 +35,38 @@ AGENTS_DIR = Path(__file__).resolve().parent
 # board from being the one that reports on it.
 ROLES = ("discover", "research", "plan", "build", "operate", "measure", "verify", "report")
 
+# User-facing teams. New missions use these exact three agents. Historical
+# stage names remain mapped below so old ledger rows still render coherently.
+TEAM_ORDER = ("lead", "builder", "verifier")
+
+TEAM_BY_AGENT = {
+    "lead-agent": "lead",
+    "mission-architect": "lead",
+    "gate-architect": "lead",
+    "researcher": "lead",
+    "system-architect": "lead",
+    "change-analyst": "lead",
+    "architecture-selector": "lead",
+    "contract-drafter": "lead",
+    "contract-reviewer": "lead",
+    "builder": "builder",
+    "design-builder": "builder",
+    "firmware-builder": "builder",
+    "board-operator": "builder",
+    "measurement": "builder",
+    "verifier": "verifier",
+    "reporter": "verifier",
+}
+
+
+def team_for_agent(name: str) -> str:
+    """Return the stable user-facing team for one internal runtime stage."""
+
+    try:
+        return TEAM_BY_AGENT[name]
+    except KeyError as exc:
+        raise ValidationError(f"agent {name!r} has no user-facing team") from exc
+
 # The kinds of envelope an agent may return.
 HANDOFF_KINDS = (
     "Brief",
@@ -79,6 +111,9 @@ LOOP_OUTCOMES = (
 # apart is what stops a Report from claiming a loop finished as `open`.
 ITERATION_OUTCOMES = LOOP_OUTCOMES + ("open",)
 
+CONTRACT_ACTIONS = ("reuse", "amend", "new")
+IMPLEMENTATION_STRATEGIES = ("reuse", "configure", "extend", "replace", "new")
+
 
 class ValidationError(ValueError):
     """A definition or a handoff does not match the shape the loop expects."""
@@ -105,6 +140,7 @@ class AgentDefinition:
     def describe(self) -> dict[str, Any]:
         return {
             "name": self.name,
+            "team": team_for_agent(self.name),
             "role": self.role,
             "description": self.description,
             "mcp_tools": list(self.mcp_tools),
@@ -211,6 +247,19 @@ def load_all(directory: Path | None = None) -> list[AgentDefinition]:
     return sorted(agents, key=lambda a: (ROLES.index(a.role), a.name))
 
 
+def load_simple_team() -> list[AgentDefinition]:
+    """Return the three-agent team used by every new scenario mission."""
+
+    agents = load_all(AGENTS_DIR / "simple")
+    expected = {"lead-agent", "builder", "verifier"}
+    found = {agent.name for agent in agents}
+    if found != expected:
+        raise ValidationError(
+            f"simple team must contain exactly {sorted(expected)}, found {sorted(found)}"
+        )
+    return agents
+
+
 # -- handoff envelopes -------------------------------------------------------
 
 _REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -255,6 +304,9 @@ def _check_step(step: Any, index: int, known_agents: set[str] | None = None) -> 
     for key in ("id", "agent", "tool", "contract", "advance_when"):
         if key not in step:
             raise ValidationError(f"Plan.steps[{index}] is missing {key!r}")
+    for key in ("id", "agent", "tool", "contract"):
+        if not isinstance(step[key], str) or not step[key].strip():
+            raise ValidationError(f"Plan.steps[{index}].{key} must be non-empty text")
     if known_agents is not None and step["agent"] not in known_agents:
         raise ValidationError(
             f"Plan.steps[{index}].agent names {step['agent']!r}; known agents: "
@@ -268,6 +320,283 @@ def _check_step(step: Any, index: int, known_agents: set[str] | None = None) -> 
         )
     for j, condition in enumerate(conditions):
         _check_condition(condition, f"Plan.steps[{index}].advance_when[{j}]")
+
+
+def validate_plan_governance(
+    plan: Any,
+    *,
+    available_capabilities: Iterable[dict[str, Any]] = (),
+) -> dict[str, Any]:
+    """Validate the Lead's contract and implementation decision.
+
+    Historical Plans remain readable through :func:`validate_handoff`; new
+    three-agent missions call this stricter validator before a Plan can enter
+    the ledger. Capability rows are the intake-time, digest-bound catalog
+    projection, never a fresh filename scan.
+    """
+
+    if not isinstance(plan, dict) or plan.get("kind") != "Plan":
+        raise ValidationError("governed output must be a Plan")
+    action = plan.get("contract_action")
+    if action not in CONTRACT_ACTIONS:
+        raise ValidationError(
+            f"Plan.contract_action must be one of {CONTRACT_ACTIONS}, got {action!r}"
+        )
+    spec = plan.get("contract_spec")
+    if not isinstance(spec, dict):
+        raise ValidationError("Plan.contract_spec must be an object")
+    required_spec = {
+        "objective",
+        "allowed_operations",
+        "forbidden_operations",
+        "pass_criteria",
+        "evidence_required",
+    }
+    missing = sorted(required_spec - set(spec))
+    if missing:
+        raise ValidationError(f"Plan.contract_spec is missing: {', '.join(missing)}")
+    if not isinstance(spec["objective"], str) or not spec["objective"].strip():
+        raise ValidationError("Plan.contract_spec.objective must be non-empty text")
+    for key in ("allowed_operations", "forbidden_operations", "evidence_required"):
+        value = spec[key]
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item.strip() for item in value
+        ):
+            raise ValidationError(f"Plan.contract_spec.{key} must be a text list")
+        if len(value) != len(set(value)):
+            raise ValidationError(f"Plan.contract_spec.{key} contains duplicates")
+    if not spec["allowed_operations"]:
+        raise ValidationError("Plan.contract_spec.allowed_operations cannot be empty")
+    if not spec["evidence_required"]:
+        raise ValidationError("Plan.contract_spec.evidence_required cannot be empty")
+    overlap = set(spec["allowed_operations"]) & set(spec["forbidden_operations"])
+    if overlap:
+        raise ValidationError(
+            "Plan.contract_spec permits and forbids the same operation(s): "
+            + ", ".join(sorted(overlap))
+        )
+    criteria = spec["pass_criteria"]
+    if not isinstance(criteria, list) or not criteria:
+        raise ValidationError("Plan.contract_spec.pass_criteria must be a non-empty list")
+    for index, condition in enumerate(criteria):
+        _check_condition(condition, f"Plan.contract_spec.pass_criteria[{index}]")
+    planned_criteria = [
+        condition
+        for step in plan.get("steps", [])
+        if isinstance(step, dict)
+        for condition in step.get("advance_when", [])
+    ]
+    if criteria != planned_criteria:
+        raise ValidationError(
+            "Plan.contract_spec.pass_criteria must exactly match the ordered conditions "
+            "the Builder steps will produce"
+        )
+
+    findings = plan.get("research_findings", [])
+    if not isinstance(findings, list):
+        raise ValidationError("Plan.research_findings must be a list")
+    finding_ids: set[str] = set()
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            raise ValidationError(f"Plan.research_findings[{index}] must be an object")
+        required = {"id", "statement", "value", "citations", "tags"}
+        missing = required - set(finding)
+        if missing:
+            raise ValidationError(
+                f"Plan.research_findings[{index}] is missing: {', '.join(sorted(missing))}"
+            )
+        identifier = finding.get("id")
+        if not isinstance(identifier, str) or not identifier.strip():
+            raise ValidationError(f"Plan.research_findings[{index}].id must be text")
+        if identifier in finding_ids:
+            raise ValidationError(f"research finding {identifier!r} is duplicated")
+        finding_ids.add(identifier)
+        for key in ("statement", "value"):
+            if not isinstance(finding.get(key), str) or not finding[key].strip():
+                raise ValidationError(
+                    f"Plan.research_findings[{index}].{key} must be non-empty text"
+                )
+        citations = finding.get("citations")
+        if not isinstance(citations, list) or not citations:
+            raise ValidationError(
+                f"Plan.research_findings[{index}].citations must be non-empty"
+            )
+        for citation_index, citation in enumerate(citations):
+            if not isinstance(citation, dict) or set(citation) != {
+                "document_id", "page", "excerpt"
+            }:
+                raise ValidationError(
+                    f"Plan.research_findings[{index}].citations[{citation_index}] "
+                    "needs exactly document_id, page and excerpt"
+                )
+            if (
+                not isinstance(citation["document_id"], str)
+                or not isinstance(citation["page"], int)
+                or isinstance(citation["page"], bool)
+                or citation["page"] < 1
+                or not isinstance(citation["excerpt"], str)
+                or not citation["excerpt"].strip()
+            ):
+                raise ValidationError(
+                    f"Plan.research_findings[{index}].citations[{citation_index}] is invalid"
+                )
+        tags = finding.get("tags")
+        if not isinstance(tags, list) or not all(
+            isinstance(tag, str) and tag.strip() for tag in tags
+        ):
+            raise ValidationError(f"Plan.research_findings[{index}].tags must be a text list")
+
+    hardware = any(
+        isinstance(step, dict) and bool(step.get("touches_hardware"))
+        for step in plan.get("steps", [])
+    )
+    if hardware and action in ("new", "amend"):
+        safety = spec.get("hardware_safety")
+        if not isinstance(safety, dict):
+            raise ValidationError(
+                "new or amended hardware contracts need contract_spec.hardware_safety"
+            )
+        limits = safety.get("limits")
+        pins = safety.get("pin_assignments")
+        stops = safety.get("stop_conditions")
+        if not isinstance(limits, list) or not limits:
+            raise ValidationError("hardware_safety.limits must be a non-empty list")
+        parameters: set[str] = set()
+        for index, limit in enumerate(limits):
+            if not isinstance(limit, dict):
+                raise ValidationError(f"hardware_safety.limits[{index}] must be an object")
+            required = {"subject", "parameter", "maximum", "unit", "source"}
+            missing = required - set(limit)
+            if missing:
+                raise ValidationError(
+                    f"hardware_safety.limits[{index}] is missing: {', '.join(sorted(missing))}"
+                )
+            parameter = str(limit.get("parameter") or "").strip().lower()
+            if parameter not in {"voltage", "current"}:
+                raise ValidationError(
+                    f"hardware_safety.limits[{index}].parameter must be voltage or current"
+                )
+            parameters.add(parameter)
+            maximum = limit.get("maximum")
+            if (
+                not isinstance(maximum, (int, float))
+                or isinstance(maximum, bool)
+                or maximum <= 0
+            ):
+                raise ValidationError(
+                    f"hardware_safety.limits[{index}].maximum must be positive"
+                )
+            for key in ("subject", "unit", "source"):
+                if not isinstance(limit.get(key), str) or not limit[key].strip():
+                    raise ValidationError(
+                        f"hardware_safety.limits[{index}].{key} must be non-empty text"
+                    )
+        if parameters != {"voltage", "current"}:
+            raise ValidationError(
+                "hardware_safety.limits must cite both voltage and current bounds"
+            )
+        if not isinstance(pins, list) or not pins:
+            raise ValidationError("hardware_safety.pin_assignments must be a non-empty list")
+        for index, pin in enumerate(pins):
+            required = {"signal", "pin", "direction", "source"}
+            if not isinstance(pin, dict) or not required <= set(pin):
+                raise ValidationError(
+                    f"hardware_safety.pin_assignments[{index}] needs signal, pin, direction and source"
+                )
+            if pin.get("direction") not in {
+                "input", "output", "bidirectional", "power", "ground"
+            }:
+                raise ValidationError(
+                    f"hardware_safety.pin_assignments[{index}].direction is unsupported"
+                )
+            for key in ("signal", "pin", "source"):
+                if not isinstance(pin.get(key), str) or not pin[key].strip():
+                    raise ValidationError(
+                        f"hardware_safety.pin_assignments[{index}].{key} must be non-empty text"
+                    )
+        if not isinstance(stops, list) or not stops or not all(
+            isinstance(item, str) and item.strip() for item in stops
+        ):
+            raise ValidationError("hardware_safety.stop_conditions must be a non-empty text list")
+        if any(
+            isinstance(step, dict) and step.get("tool") == "measure_board_scope"
+            for step in plan.get("steps", [])
+        ):
+            scope_channels = safety.get("scope_channels")
+            if not isinstance(scope_channels, list) or not scope_channels:
+                raise ValidationError(
+                    "hardware_safety.scope_channels must review every oscilloscope channel"
+                )
+
+    implementation = plan.get("implementation")
+    if not isinstance(implementation, dict):
+        raise ValidationError("Plan.implementation must be an object")
+    strategy = implementation.get("strategy")
+    if strategy not in IMPLEMENTATION_STRATEGIES:
+        raise ValidationError(
+            "Plan.implementation.strategy must be one of "
+            f"{IMPLEMENTATION_STRATEGIES}, got {strategy!r}"
+        )
+    base = implementation.get("base_capabilities")
+    if not isinstance(base, list):
+        raise ValidationError("Plan.implementation.base_capabilities must be a list")
+    write_scope = implementation.get("write_scope")
+    if not isinstance(write_scope, list) or not all(
+        isinstance(item, str) and item.strip() and not Path(item).is_absolute()
+        for item in write_scope
+    ):
+        raise ValidationError(
+            "Plan.implementation.write_scope must contain project-relative paths"
+        )
+    if any(".." in Path(item).parts for item in write_scope):
+        raise ValidationError("Plan.implementation.write_scope may not escape the project")
+
+    if strategy in ("reuse", "configure", "extend", "replace") and not base:
+        raise ValidationError(f"implementation strategy {strategy!r} needs a base capability")
+    reason_key = "replacement_reason" if strategy == "replace" else "new_reason"
+    if strategy in ("replace", "new") and not str(implementation.get(reason_key) or "").strip():
+        raise ValidationError(f"implementation strategy {strategy!r} needs {reason_key}")
+    if strategy == "reuse" and write_scope:
+        raise ValidationError("implementation strategy 'reuse' forbids every write path")
+    if strategy == "configure" and any(
+        Path(item).suffix.lower() not in {".yaml", ".yml", ".json", ".toml", ".ini", ".cfg"}
+        for item in write_scope
+    ):
+        raise ValidationError("implementation strategy 'configure' may write only configuration files")
+
+    catalog = {
+        str(row.get("id")): row
+        for row in available_capabilities
+        if isinstance(row, dict) and isinstance(row.get("id"), str)
+    }
+    seen: set[str] = set()
+    for index, reference in enumerate(base):
+        if not isinstance(reference, dict):
+            raise ValidationError(f"base_capabilities[{index}] must be an object")
+        if set(reference) != {"id", "version", "catalog_sha256"}:
+            raise ValidationError(
+                f"base_capabilities[{index}] needs exactly id, version and catalog_sha256"
+            )
+        identifier = reference.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            raise ValidationError(f"base_capabilities[{index}].id must be text")
+        if identifier in seen:
+            raise ValidationError(f"base capability {identifier!r} is selected twice")
+        seen.add(identifier)
+        row = catalog.get(identifier)
+        if row is None:
+            raise ValidationError(f"base capability {identifier!r} is not in the offered catalog")
+        expected_version = str(row.get("version") or "v1")
+        if reference.get("version") != expected_version:
+            raise ValidationError(
+                f"base capability {identifier!r} version changed: expected {expected_version!r}"
+            )
+        if reference.get("catalog_sha256") != row.get("sha256"):
+            raise ValidationError(f"base capability {identifier!r} digest is stale or invented")
+
+    if strategy == "new" and catalog and not str(implementation.get("new_reason") or "").strip():
+        raise ValidationError("a reusable candidate exists; strategy 'new' needs an explicit analysis")
+    return plan
 
 
 def validate_handoff(
@@ -324,20 +653,27 @@ def validate_handoff(
         steps = envelope["steps"]
         if not isinstance(steps, list):
             raise ValidationError("Plan.steps must be a list")
-        # A Plan that stops -- `blocked_on: contract_gap`, or `exhausted` -- is a
-        # legitimate plan with nothing in it. Demanding a step would push the
-        # architect into inventing one rather than refusing.
+        # A Plan may stop or ask a person for missing facts without inventing
+        # an executable step. The loop distinguishes these from reductions.
+        if envelope.get("blocked_on") is not None and (
+            not isinstance(envelope["blocked_on"], str) or not envelope["blocked_on"].strip()
+        ):
+            raise ValidationError("Plan.blocked_on must be a non-empty string or null")
+        if envelope.get("clarification_question") is not None and (
+            not isinstance(envelope["clarification_question"], str) or not envelope["clarification_question"].strip()
+        ):
+            raise ValidationError("Plan.clarification_question must be a non-empty string or null")
         if not steps and not envelope.get("blocked_on"):
             raise ValidationError(
                 "Plan.steps is empty and blocked_on is not set. A plan with no steps and no "
                 "reason for having none cannot be executed or reviewed."
             )
-        ids = [s.get("id") for s in steps if isinstance(s, dict)]
-        if len(set(ids)) != len(ids):
-            raise ValidationError("Plan.steps ids must be unique")
         agent_names = set(known_agents) if known_agents is not None else None
         for index, step in enumerate(steps):
             _check_step(step, index, agent_names)
+        ids = [s["id"] for s in steps]
+        if len(set(ids)) != len(ids):
+            raise ValidationError("Plan.steps ids must be unique")
 
     elif kind == "StepResult":
         status = envelope["status"]

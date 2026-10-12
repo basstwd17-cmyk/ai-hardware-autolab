@@ -31,6 +31,7 @@ def profile_channel_capture(
     ends before a plausible-looking waveform becomes evidence.
     """
 
+    gate.require_scope_capture(params)
     rows = params.get("channels")
     if not isinstance(rows, list) or not 1 <= len(rows) <= 4:
         raise ValueError("profile scope parameters need 1..4 channels")
@@ -83,17 +84,27 @@ def profile_channel_capture(
     scope.check_errors("profile channel setup")
     scope.assert_high_impedance(*channels)
 
-    scope.scpi.write("SING")
+    # A modest starting point, not a timing/precision ceiling. The agent may
+    # select more points, or None to retain a deliberately configured record.
+    requested_points = params.get("record_length", 100_000)
+    actual_points = (scope.configure_record_length(requested_points)
+                     if requested_points is not None else None)
+
+    scope.arm_single()
+    scope.check_errors("single acquisition")
     scope.wait_until_complete(timeout_s)
     scope.stop()
     waveforms = tuple(scope.read_waveform(channel, binary=True) for channel in channels)
     measurements: dict[str, Any] = {
         "sample_count": sum(len(waveform.values_v) for waveform in waveforms),
         "retrieval_path": "scope_channel_waveforms",
+        "acquisition_mode": "single",
         "timebase_s_per_div": timebase,
         "trigger_channel": trigger_channel,
         "trigger_level_v": trigger_level,
         "trigger_slope": slope,
+        "requested_record_length": requested_points,
+        "configured_record_length": actual_points,
     }
     for waveform in waveforms:
         values = waveform.values_v
@@ -105,6 +116,7 @@ def profile_channel_capture(
             measurements[f"CH{waveform.channel}_max_v"] = max(values)
             measurements[f"CH{waveform.channel}_mean_v"] = fmean(values)
             measurements[f"CH{waveform.channel}_vpp_v"] = max(values) - min(values)
+    gate.require_measured_voltage(measurements)
     return RecipeOutcome(
         measurements=measurements,
         verdict="PASS",

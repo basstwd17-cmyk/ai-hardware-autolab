@@ -9,12 +9,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from QKD_PROJ.hwtools import Contracts, RunRecord, SafetyGate, program_cpld_sram, scan_jtag
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint
 
 
 ROOT = Path(__file__).resolve().parent
 
 
 def main() -> int:
+    require_brokered_entrypoint(__file__)
     gate = SafetyGate(Contracts.load("gate11-gpio-spi-code-registers.yaml"), allow_hardware=True)
     record = RunRecord("gate11_gpio_spi_code_regs_sram", gate)
     scan = scan_jtag(gate, record=record)

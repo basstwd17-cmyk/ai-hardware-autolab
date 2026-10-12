@@ -15,6 +15,7 @@ from QKD_PROJ.hwtools import (  # noqa: E402
     program_cpld_sram,
     scan_jtag,
 )
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parent
@@ -23,6 +24,7 @@ PROGRAM_XCF = ROOT.parent / "contracts" / "gate7-spi-standard-ungated-loopback-s
 
 
 def main() -> int:
+    require_brokered_entrypoint(__file__)
     gate = SafetyGate(Contracts.load(CONTRACT), allow_hardware=True)
     record = RunRecord("gate7_spi_standard_ungated_loopback_sram", gate)
     scan = scan_jtag(gate, record=record)

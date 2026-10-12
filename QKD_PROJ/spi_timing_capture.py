@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from QKD_PROJ.hwtools.instruments.rtm3004 import RTM3004  # noqa: E402
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint  # noqa: E402
 
 HOST = "192.168.50.3"
 THRESHOLD_V = 1.65
@@ -57,6 +58,7 @@ def to_bytes(bits: list[int]) -> str:
 
 
 def main() -> int:
+    require_brokered_entrypoint(__file__)
     parser = argparse.ArgumentParser()
     parser.add_argument("--arm", action="store_true", help="arm a fresh single acquisition and exit")
     parser.add_argument("--wait", type=float, default=0.0,

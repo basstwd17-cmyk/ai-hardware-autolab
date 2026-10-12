@@ -139,7 +139,8 @@ def validate_scan_xcf(path: Path, gate: SafetyGate) -> ScanXcf:
     if _tag(root) != "ispXCF":
         raise JtagError(f"Unexpected XCF root element: {_tag(root)}")
     devices = [node for node in root.iter() if _tag(node) == "Device"]
-    expected_count = int(gate.pass_criteria().get("expected_device_count", 1))
+    jtag_identity = gate.contracts.test_spec.get("jtag") or {}
+    expected_count = int(jtag_identity.get("expected_device_count", gate.pass_criteria().get("expected_device_count", 1)))
     if len(devices) != expected_count:
         raise JtagError(
             f"XCF has {len(devices)} device(s); contract requires {expected_count}."
@@ -198,7 +199,7 @@ def validate_scan_xcf(path: Path, gate: SafetyGate) -> ScanXcf:
     device_name = _child_text(device, "Name")
     xcf_idcode = normalize_idcode(_child_text(device, "IDCode"))
     board_idcode = normalize_idcode(verified["cpld.expected_idcode"])
-    spec_idcode = normalize_idcode(gate.pass_criteria()["expected_idcode"])
+    spec_idcode = normalize_idcode(jtag_identity.get("expected_idcode", gate.pass_criteria().get("expected_idcode", board_idcode)))
     spec_port = str(gate.contracts.test_spec["jtag"]["port"])
     expected_device = str(verified["cpld.device"])
     board_port = str(verified["jtag.cable.port"])

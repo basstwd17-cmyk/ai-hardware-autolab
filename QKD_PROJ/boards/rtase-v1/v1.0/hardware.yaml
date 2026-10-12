@@ -1,0 +1,182 @@
+schema_version: 1
+board_id: rtase-v1
+revision: v1.0
+title: RTASE V1 · BeagleBone Black · MachXO2 · RTM3004
+status: active
+device_map: QKD_PROJ/boards/rtase-v1/v1.0/device-map.yaml
+
+devices:
+  - {kind: bbb, model: BeagleBone Black, host: 192.168.50.2, port: 22, user: xilinx}
+  - {kind: scope, model: RTM3004, host: 192.168.50.3, port: 5025}
+  - {kind: cpld, model: LCMXO2-4000HC, cable: HW-USBN-2B, port: FTUSB-0}
+
+# Connection metadata for the current bench. Conversation jobs derive tools
+# from the connected device kinds and may execute new workspace artifacts; this
+# compatibility map is not their script or bitstream allowlist.
+tools:
+  run_bbb:
+    approval: automatic
+    description: Identify the BBB or run a script from the current job workspace.
+  measure_scope:
+    approval: automatic
+    description: Identify the RTM3004 or capture the installed SPI/RF channels within their input limits.
+  scan_jtag:
+    approval: automatic
+    description: Read the one-device JTAG chain and verify the expected IDCODE.
+  program_cpld_sram:
+    approval: automatic
+    description: Program a workspace-produced volatile SRAM image after a fresh JTAG scan.
+  deploy_pru:
+    approval: automatic
+    description: Upload PRU firmware and restart the installed PRU service.
+
+allowed_operations:
+  - bbb_identify
+  - bbb_ssh_command
+  - scope_identify
+  - oscilloscope_capture
+  - jtag_scan
+  - sram_fast_program
+  - pru_deploy
+forbidden_operations:
+  - nonvolatile_flash
+  - change_board_power
+  - enable_power_supply
+  - install_overlay
+  - reboot_bbb
+  - function_generator_output
+
+bbb:
+  target: {host: 192.168.50.2, port: 22, user: xilinx}
+  target_model_substring: AM335x BeagleBone Black
+  repo_root: BeagleBone-Black
+  remote_root: pru
+  pins:
+    cs: P9_17
+    mosi: P9_18
+    miso: P9_21
+    clk: P9_22
+  spi: {mode: 0, configured_speed_hz: 1000000, gpio_half_period_us: 20}
+  firmware:
+    build_dir: pru0_pulse_io
+    build_output: gen/pru0_pulse_io.out
+    pru_cgt: /usr/share/ti/cgt-pru
+    installed_as: /lib/firmware/am335x-pru0-rtase.out
+  service:
+    unit: rtase-pru.service
+    helper: /usr/local/sbin/rtase-pru-service
+    active_timeout_s: 130
+  verify:
+    rpmsg_device: /dev/rpmsg0
+    status_command: python3 ~/pru/rtase.py --local status
+    ping_request_hex: "01"
+    ping_reply_hex: "0101"
+  deploy:
+    - {local: firmware, remote: pru/pru0_pulse_io, kind: tree}
+    - {local: host/rtase.py, remote: pru/rtase.py, kind: file}
+    - {local: host/rtase_spi.py, remote: pru/rtase_spi.py, kind: file}
+
+# Historical CLI compatibility entries. New conversation jobs do not require
+# scripts to appear here and record the hash of the workspace file they execute.
+scripts:
+  diagnose_rtase:
+    path: BeagleBone-Black/scripts/diagnose_rtase.sh
+    sha256: 52f8d89e7662be1c58cd4ce97517bc5a0b507e06e5cd026cee17648e3bf27ac9
+    effect_class: read
+    approval: automatic
+    expected_returncode: 0
+  mcspi_kernel_state:
+    path: BeagleBone-Black/diagnostics/mcspi_kernel_state.sh
+    sha256: 2348081f4ce660454dba72ce573d248db1117d6467568c87e3100841952a77f8
+    effect_class: read
+    approval: automatic
+    expected_returncode: 0
+  mcspi_ch0conf:
+    path: BeagleBone-Black/diagnostics/mcspi_ch0conf.sh
+    sha256: d29925e22784e8ade8f1e9bab85d485014dc0a9f7fdb1d0d0c354e79207d41c7
+    effect_class: mutate
+    approval: automatic
+    expected_returncode: 0
+  spi_loopback_mode_compare:
+    path: BeagleBone-Black/diagnostics/spi_loopback_mode_compare.sh
+    sha256: 516c8089473bf24c9fa9050d399ffb5d2bdfec301e1e84e66a9f06ac8f533086
+    effect_class: mutate
+    approval: automatic
+    expected_returncode: 0
+  spi_clocked_response_verify:
+    path: BeagleBone-Black/diagnostics/spi_clocked_response_verify.sh
+    sha256: 735c91d33748dce731fde0a909a19178b00f7a756782fe311120bb2d128aac72
+    effect_class: mutate
+    approval: automatic
+    expected_returncode: 0
+  p9_21_gpio_loopback_probe:
+    path: BeagleBone-Black/diagnostics/p9_21_gpio_loopback_probe.sh
+    sha256: bc695161fea36f3512c22af6e95b082307a389b1c135561124763fa3a629768a
+    effect_class: mutate
+    approval: automatic
+    expected_returncode: 0
+  mcspi_loopback_selftest:
+    path: BeagleBone-Black/diagnostics/mcspi_loopback_selftest.sh
+    sha256: 9a346387c74a33f9d55d5e904f5f366374f2a8f527fc3f8cb86db8305ef104f8
+    effect_class: mutate
+    approval: automatic
+    expected_returncode: 0
+
+scope:
+  target: {model: RTM3004, host: 192.168.50.3, port: 5025}
+  channels:
+    - {channel: 1, signal: CS, source: P9_17, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 2, signal: CLK, source: P9_22, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 3, signal: MOSI, source: P9_18, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 4, signal: MISO, source: P9_21, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+
+hardware_safety:
+  devices:
+    - {kind: scope, model: RTM3004, host: 192.168.50.3, port: 5025}
+  scope_channels:
+    - {channel: 1, signal: CS, source: P9_17, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 2, signal: CLK, source: P9_22, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 3, signal: MOSI, source: P9_18, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+    - {channel: 4, signal: MISO, source: P9_21, termination: 1_Mohm, coupling: DCLimit, probe_attenuation: 10, max_abs_input_v: 3.3}
+  stop_conditions:
+    - Stop if a live device identity or endpoint differs from this profile.
+    - Stop unless the scope inputs read back as DCLimit/high impedance with 10x attenuation.
+    - Stop if a scope input exceeds 3.3 V.
+    - Stop on register mismatch, missing MISO, absent trigger, timeout, or ambiguous board state; do not retry automatically.
+
+jtag:
+  scan_xcf: QKD_PROJ/boards/rtase-v1/v1.0/jtag-scan.xcf
+  # Historical CLI fallback only. Conversation jobs supply their workspace XCF.
+  program_xcf: QKD_PROJ/boards/rtase-v1/v1.0/gpio-spi-code-registers-sram.xcf
+  cable: Lattice HW-USBN-2B
+  port: FTUSB-0
+  header: U4
+
+test_design:
+  top: spi_gpio_code_regs
+  sources:
+    hdl: QKD_PROJ/spi_gpio_code_regs/spi_gpio_code_regs.v
+    constraints: QKD_PROJ/spi_gpio_code_regs/spi_gpio_code_regs.lpf
+  output: {port: spi_miso, pin: 33, io_type: LVCMOS33, drive_ma: 4, slew: SLOW}
+
+build_result:
+  bitstream_design_sha256: f77f08b170c2bed49a7574a830e5a65b386f1b20856862ae7ba2222fd2ec864d
+sram_program_candidate:
+  immutable: true
+  directory: QKD_PROJ/candidates/gate11-gpio-spi-code-regs
+  bitstream: spi_gpio_code_regs_impl1.bit
+  bitstream_sha256: c09323826a08f203413a29b6696abe7693cdaf9561af0d3bdf2a110d4cf3c029
+  bitstream_design_sha256: f77f08b170c2bed49a7574a830e5a65b386f1b20856862ae7ba2222fd2ec864d
+  bitstream_bytes: 17182
+  source_sha256:
+    spi_gpio_code_regs.v: f0f31aeebf0db403b74453833a149356925d4ce0803940f0791b305d7436e622
+    spi_gpio_code_regs.lpf: b78242074cdf924a4b95460b7c4b636b8203432c6a3bdefb9a61b6e32a42761c
+
+pass_criteria:
+  expected_model_substring: AM335x BeagleBone Black
+  expected_device_count: 1
+  expected_idcode: "0x012BC043"
+  script_returncode: 0
+  expected_service_state: active
+  expected_ping_reply_hex: "0101"
+  expected_status_ok: true

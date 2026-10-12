@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Sequence
 
 from QKD_PROJ.agents.schema import AgentDefinition
+from QKD_PROJ.orchestrator import jobs as J
 from QKD_PROJ.orchestrator.jobs import JobLedger
 from QKD_PROJ.orchestrator.pagination import iter_events
 
@@ -182,8 +183,17 @@ class RuntimeEventRecorder:
             return 0
         pending, self._pending = self._pending, []
         written = 0
+        terminal: dict[str, bool] = {}
         for job_id, kind, payload, agent in pending:
             try:
+                if job_id not in terminal:
+                    terminal[job_id] = self.ledger.job(job_id).state == J.DONE
+                if terminal[job_id]:
+                    # A turn interrupt may emit a short protocol tail after
+                    # ``control.cancel``. Keeping it would make the activity
+                    # feed look as though a cancelled job continued working.
+                    self.dropped += 1
+                    continue
                 self.ledger.append_event(job_id, kind, payload, agent)
                 written += 1
             except Exception:  # noqa: BLE001 - a lost notification is not a lost run
@@ -218,6 +228,9 @@ class RuntimeEventRecorder:
             with self.recording(job_id, agent.name):
                 return runner(agent, task)
 
+        check = getattr(runner, 'check_resume', None)
+        if callable(check):
+            recording_runner.check_resume = check
         return recording_runner
 
 

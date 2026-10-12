@@ -10,6 +10,21 @@ from QKD_PROJ.orchestrator import wire as W
 TOKEN = "device-token-" + "x" * 32
 
 
+def test_knowledge_replica_resumes_from_cloud_cursor(monkeypatch):
+    calls = []
+    def daemon(frame, address, timeout):
+        assert frame['type'] == 'knowledge.events' and frame['after'] == 12
+        assert frame['limit'] == 100
+        return {'ok':True,'knowledge':{'events':[{'event_id':13}], 'cursor':13,'latest':15}}
+    def cloud(path, body):
+        calls.append((path,body))
+        return {'ok':True,'cursor':12 if 'events' not in body else 13}
+    monkeypatch.setattr(R.S,'send',daemon)
+    result = R.CloudRelayClient('https://rtase.pages.dev','pc',TOKEN,request=cloud).sync_knowledge()
+    assert result['cursor'] == 13
+    assert calls[-1][1] == {'deviceId':'pc','after':12,'events':[{'event_id':13}],'latest':15}
+
+
 def test_tick_mirrors_status_and_delivers_one_steer(monkeypatch):
     daemon_calls: list[dict] = []
 

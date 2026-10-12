@@ -47,6 +47,7 @@ TOP_LEVEL_KEYS = {
     "max_auto_approvals",
     "max_iterations",
     "permissions",
+    "authorization_scope",
 }
 PERMISSION_KEYS = {
     "id",
@@ -109,6 +110,7 @@ class CampaignPolicy:
     sha256: str
     contracts_dir: Path
     project_root: Path
+    authorization_scope: str = "scenario"
 
     @classmethod
     def load(
@@ -152,6 +154,9 @@ class CampaignPolicy:
         scenario_sha256 = _digest(data.get("scenario_sha256"), "scenario_sha256")
         max_auto_approvals = _positive(data.get("max_auto_approvals"), "max_auto_approvals")
         max_iterations = _positive(data.get("max_iterations"), "max_iterations")
+        authorization_scope = data.get("authorization_scope", "scenario")
+        if authorization_scope not in ("scenario", "scope_session"):
+            raise CampaignPolicyError("authorization_scope must be scenario or scope_session")
 
         raw_permissions = data.get("permissions")
         if not isinstance(raw_permissions, list) or not raw_permissions:
@@ -160,6 +165,19 @@ class CampaignPolicy:
             _permission(raw, contracts_dir, project_root, schema_version)
             for raw in raw_permissions
         )
+        if authorization_scope == "scope_session":
+            # Explicit, time-limited instrument consent, not a general hardware
+            # delegation. Even hand-authored YAML must pin the real connection.
+            from QKD_PROJ.hwtools.safety import Contracts, SafetyGate
+            for permission in permissions:
+                if permission.tool != "measure_scope" or permission.artifact_mode != "pinned":
+                    raise CampaignPolicyError("scope_session permits only pinned measure_scope permissions")
+                bound = Contracts.load(permission.contract, contracts_dir, project_root=project_root)
+                SafetyGate(bound, allow_hardware=True).instrument_scope()
+                for source in (bound.test_spec_path, bound.board_map_path):
+                    reference = source.resolve().relative_to(project_root).as_posix()
+                    if permission.artifacts.get(reference) != sha256_file(source):
+                        raise CampaignPolicyError("scope_session must pin its contract and actual connection map")
         ids = [permission.permission_id for permission in permissions]
         if len(ids) != len(set(ids)):
             raise CampaignPolicyError("campaign permission ids must be unique")
@@ -180,6 +198,7 @@ class CampaignPolicy:
             sha256=actual,
             contracts_dir=contracts_dir,
             project_root=project_root,
+            authorization_scope=authorization_scope,
         )
 
     def permission_for(
@@ -213,7 +232,7 @@ class CampaignAutoApprover:
         self.runs_dir = Path(runs_dir or (policy.project_root / "QKD_PROJ" / "runs")).resolve()
 
     def evaluate(
-        self, job: Job, step: dict[str, Any], agent: AgentDefinition
+        self, job: Job, step: dict[str, Any], agent: AgentDefinition, *, check_budget: bool = True
     ) -> AutoApprovalEvaluation:
         prefix = {
             "campaign_id": self.policy.campaign_id,
@@ -226,19 +245,32 @@ class CampaignAutoApprover:
 
         if _parse_time(self.now()) >= _parse_time(self.policy.expires_at):
             return refuse(f"campaign expired at {self.policy.expires_at}")
+        if job.state == "done":
+            return refuse("a completed or cancelled job cannot receive automatic approval")
         if job.iteration > self.policy.max_iterations:
             return refuse(
                 f"iteration {job.iteration} exceeds campaign maximum {self.policy.max_iterations}"
             )
         scenario = self._scenario(job.job_id)
         actual_scenario = hashlib.sha256(scenario.strip().encode("utf-8")).hexdigest()
-        if actual_scenario != self.policy.scenario_sha256:
+        if self.policy.authorization_scope == "scope_session":
+            briefs = self.ledger.handoffs(job.job_id, "Brief", 0)
+            resources = briefs[-1].payload.get("resources", {}) if briefs else {}
+            if resources.get("execution_mode") != "hardware":
+                return refuse("scope_session applies only to explicitly hardware-mode jobs")
+        elif actual_scenario != self.policy.scenario_sha256:
             return refuse(
                 f"job scenario hashes to {actual_scenario}, not the approved scenario"
             )
 
         contract = str(step.get("contract") or job.gate)
         tool = str(step.get("tool") or "")
+        for event in iter_events(self.ledger, job.job_id):
+            if event.kind in ("approval.decided", "approval.withdrawn") and event.payload.get("approval_id"):
+                decision = self.ledger.approval(event.payload["approval_id"])
+                if (decision.contract == contract and decision.step_id == str(step.get("id") or "")
+                        and decision.state in ("denied", "withdrawn")):
+                    return refuse("this step was refused or withdrawn; a campaign cannot override that decision")
         permission = self.policy.permission_for(contract, agent.name, tool)
         if permission is None:
             return refuse(
@@ -275,7 +307,11 @@ class CampaignAutoApprover:
             approved_artifacts = dict(permission.artifacts)
         else:
             if not requested_artifacts:
-                return refuse("a run-manifest permission requires this iteration's artifacts")
+                requested_artifacts = self._prior_run_artifacts(job, permission)
+            if not requested_artifacts:
+                return refuse(
+                    "a run-manifest permission requires a PASS artifact from an earlier Builder step"
+                )
             normalized: dict[str, str] = {}
             for reference, digest in requested_artifacts.items():
                 if not isinstance(reference, str) or not isinstance(digest, str):
@@ -289,11 +325,11 @@ class CampaignAutoApprover:
             approved_artifacts = normalized
 
         total, per_permission = self._grant_counts(permission.permission_id)
-        if total >= self.policy.max_auto_approvals:
+        if check_budget and total >= self.policy.max_auto_approvals:
             return refuse(
                 f"campaign used all {self.policy.max_auto_approvals} automatic approvals"
             )
-        if per_permission >= permission.max_approvals:
+        if check_budget and per_permission >= permission.max_approvals:
             return refuse(
                 f"permission {permission.permission_id} used all "
                 f"{permission.max_approvals} automatic approvals"
@@ -308,6 +344,54 @@ class CampaignAutoApprover:
             lineage_runs=lineage_runs,
             **prefix,
         )
+
+    def _prior_run_artifacts(
+        self, job: Job, permission: CampaignPermission
+    ) -> dict[str, str]:
+        """Late-bind immutable Builder outputs before an upload.
+
+        Lead cannot know the hash of a binary that Builder has not created.
+        The permission therefore names allowed producer selectors and artifact
+        kinds; this method discovers only matching artifacts from earlier
+        StepResults in the same durable iteration.  ``_derived_artifact_problem``
+        independently verifies the manifest again before approval.
+        """
+        try:
+            runs_prefix = self.runs_dir.relative_to(self.policy.project_root)
+        except ValueError:
+            return {}
+        result: dict[str, str] = {}
+        for handoff in self.ledger.handoffs(job.job_id, "StepResult", job.iteration):
+            for run_name in handoff.payload.get("runs") or []:
+                if not isinstance(run_name, str) or Path(run_name).name != run_name:
+                    continue
+                manifest_path = self.runs_dir / run_name / "manifest.json"
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if not isinstance(manifest, dict) or manifest.get("verdict") != "PASS":
+                    continue
+                selectors = {
+                    f"{step.get('tool', '')}.{step.get('action', '')}"
+                    for step in manifest.get("steps") or []
+                    if isinstance(step, dict) and step.get("verdict") == "PASS"
+                }
+                if not selectors.intersection(permission.producer_tools):
+                    continue
+                for artifact in manifest.get("artifacts") or []:
+                    if (
+                        not isinstance(artifact, dict)
+                        or artifact.get("kind") not in permission.artifact_kinds
+                        or not isinstance(artifact.get("path"), str)
+                        or not isinstance(artifact.get("sha256"), str)
+                    ):
+                        continue
+                    reference = (
+                        runs_prefix / run_name / artifact["path"]
+                    ).as_posix()
+                    result[reference] = artifact["sha256"].lower()
+        return dict(sorted(result.items()))
 
     def apply(
         self,
@@ -349,6 +433,10 @@ class CampaignAutoApprover:
         briefs = self.ledger.handoffs(job_id, "Brief", 0)
         if not briefs:
             return ""
+        if briefs[-1].payload.get("workflow") == "conversation-prototype-v1":
+            from .conversation_flow import conversation_brief
+            inputs = conversation_brief(self.ledger, job_id).get("inputs") or {}
+            return str(inputs.get("authorization_scenario") or inputs.get("scenario") or "")
         return str(briefs[-1].payload.get("scenario") or "")
 
     def _derived_artifact_problem(
@@ -540,6 +628,7 @@ class CampaignController:
         self.active_filename = filename
         self.activated_by = approved_by.strip()
         self.activated_at = self.now()
+        self._bind_iteration_limit(job_id, policy.max_iterations)
         self.ledger.append_event(
             job_id,
             "campaign.activated",
@@ -550,10 +639,50 @@ class CampaignController:
                 "approved_by": self.activated_by,
                 "expires_at": policy.expires_at,
                 "schema_version": policy.schema_version,
+                "authorization_scope": policy.authorization_scope,
             },
             self.activated_by,
         )
+        self._grant_waiting_jobs(job_id)
         return self.status()
+
+    def _grant_waiting_jobs(self, origin_job_id: str) -> None:
+        targets = ([job.job_id for job in self.ledger.jobs() if job.state != "done"]
+                   if self.active_policy and self.active_policy.authorization_scope == "scope_session"
+                   else [origin_job_id])
+        for job_id in targets:
+            self._grant_matching_pending(job_id)
+
+    def _grant_matching_pending(self, job_id: str) -> None:
+        """Apply a newly signed campaign to the step already waiting for it."""
+
+        simple = getattr(self.router, "simple", None) if self.router is not None else None
+        approver = getattr(simple, "auto_approver", None)
+        if simple is None or approver is None:
+            return
+        plans = self.ledger.handoffs(job_id, "Plan")
+        if not plans:
+            return
+        steps = {
+            str(step.get("id") or ""): step
+            for step in plans[-1].payload.get("steps", [])
+            if isinstance(step, dict)
+        }
+        job = self.ledger.job(job_id)
+        for approval in self.ledger.pending_approvals(job_id):
+            step = steps.get(approval.step_id)
+            if step is None:
+                continue
+            try:
+                agent = simple.agent(str(step.get("agent") or ""))
+                evaluation = approver.evaluate(job, step, agent)
+                if (evaluation.allowed and approval.max_executions <= evaluation.max_executions
+                        and dict(approval.artifacts) == dict(evaluation.artifacts or {})):
+                    approver.apply(approval, evaluation)
+            except Exception:
+                # Activation remains valid for later steps. The unmatched
+                # request stays pending and its normal UI explains the stop.
+                continue
 
     def deactivate(self, requested_by: str, reason: str = "") -> dict[str, Any]:
         if self.active_policy is None or self.active_job_id is None:
@@ -572,10 +701,13 @@ class CampaignController:
             },
             requested_by.strip(),
         )
+        self._bind_iteration_limit(job_id, None)
         self._clear()
         return self.status()
 
     def recover(self) -> dict[str, Any]:
+        if not self.hardware_enabled:
+            return self.status()
         latest = None
         for event in iter_events(self.ledger):
             if event.kind in ("campaign.activated", "campaign.deactivated"):
@@ -588,7 +720,7 @@ class CampaignController:
             if _parse_time(self.now()) >= _parse_time(policy.expires_at):
                 return self.status()
             job = self.ledger.job(latest.job_id)
-            if job.state == "done":
+            if job.state == "done" and policy.authorization_scope != "scope_session":
                 return self.status()
         except Exception:  # noqa: BLE001 - recovery of authority must fail closed
             return self.status()
@@ -597,6 +729,8 @@ class CampaignController:
         self.active_filename = str(payload.get("filename"))
         self.activated_by = str(payload.get("approved_by") or latest.agent or "")
         self.activated_at = latest.at
+        self._bind_iteration_limit(latest.job_id, policy.max_iterations)
+        self._grant_waiting_jobs(latest.job_id)
         return self.status()
 
     def status(self) -> dict[str, Any]:
@@ -645,17 +779,37 @@ class CampaignController:
         if self.router is not None:
             self.router.auto_approver = approver
         self.hardware_gate.active_campaign_sha256 = policy.sha256
+        self.hardware_gate.active_campaign_expires_at = policy.expires_at
         self.hardware_gate.active_campaign_contracts = {
             permission.contract: permission.contract_sha256
             for permission in policy.permissions
         }
         self.active_policy = policy
 
+    def _bind_iteration_limit(self, job_id: str, limit: int | None) -> None:
+        """Apply campaign lifetime to both execution implementations.
+
+        The router contains the legacy execution loop and the default simple
+        three-agent loop.  Binding both is harmless and keeps the authority
+        correct if a historical job is resumed while a campaign is active.
+        """
+        loops = [self.execution_loop]
+        simple = getattr(self.router, "simple", None) if self.router is not None else None
+        if simple is not None and simple not in loops:
+            loops.append(simple)
+        for loop in loops:
+            setter = getattr(loop, "set_campaign_iteration_limit", None)
+            if callable(setter):
+                setter(job_id, limit)
+
     def _clear(self) -> None:
+        if self.active_job_id is not None:
+            self._bind_iteration_limit(self.active_job_id, None)
         self.execution_loop.auto_approver = None
         if self.router is not None:
             self.router.auto_approver = None
         self.hardware_gate.active_campaign_sha256 = None
+        self.hardware_gate.active_campaign_expires_at = None
         self.hardware_gate.active_campaign_contracts = {}
         self.active_policy = None
         self.active_job_id = None
@@ -663,16 +817,37 @@ class CampaignController:
         self.activated_by = None
         self.activated_at = None
 
-    @staticmethod
-    def _policy_description(policy: CampaignPolicy) -> dict[str, Any]:
+    def _policy_description(self, policy: CampaignPolicy) -> dict[str, Any]:
+        safety_envelopes: list[dict[str, Any]] = []
+        seen_contracts: set[str] = set()
+        for permission in policy.permissions:
+            if permission.contract in seen_contracts:
+                continue
+            seen_contracts.add(permission.contract)
+            path = policy.contracts_dir / permission.contract
+            try:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError):
+                data = {}
+            safety = data.get("hardware_safety") if isinstance(data, dict) else None
+            if isinstance(safety, dict):
+                safety_envelopes.append(
+                    {
+                        "contract": permission.contract,
+                        "contract_sha256": permission.contract_sha256,
+                        "hardware_safety": dict(safety),
+                    }
+                )
         return {
             "campaign_id": policy.campaign_id,
             "schema_version": policy.schema_version,
+            "authorization_scope": policy.authorization_scope,
             "sha256": policy.sha256,
             "approved_by": policy.approved_by,
             "expires_at": policy.expires_at,
             "max_auto_approvals": policy.max_auto_approvals,
             "max_iterations": policy.max_iterations,
+            "safety_envelopes": safety_envelopes,
             "permissions": [
                 {
                     "id": item.permission_id,

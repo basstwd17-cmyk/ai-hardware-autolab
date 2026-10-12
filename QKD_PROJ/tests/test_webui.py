@@ -382,15 +382,16 @@ def test_agent_catalog_is_the_safe_half_of_runtime_definitions():
         answer = http.get("/api/agents")
     assert answer.status_code == 200
     agents = {item["name"]: item for item in answer.json()["agents"]}
-    assert len(agents) == 14
-    assert agents["mission-architect"]["role"] == "discover"
-    assert agents["board-operator"]["touchesHardware"] is True
-    assert "program_cpld_sram" in agents["board-operator"]["mcpTools"]
-    assert agents["firmware-builder"]["role"] == "build"
-    assert agents["firmware-builder"]["touchesHardware"] is False
-    assert "run_board_build" in agents["firmware-builder"]["mcpTools"]
-    assert "prompt" not in agents["board-operator"]
-    assert "source" not in agents["board-operator"]
+    assert set(agents) == {"lead-agent", "builder", "verifier"}
+    assert {item["team"] for item in agents.values()} == {"lead", "builder", "verifier"}
+    assert agents["lead-agent"]["nativeWeb"] is True
+    assert agents["builder"]["touchesHardware"] is True
+    assert "build_cpld" in agents["builder"]["mcpTools"]
+    assert "program_cpld_sram" in agents["builder"]["mcpTools"]
+    assert "measure_board_scope" in agents["builder"]["mcpTools"]
+    assert agents["verifier"]["touchesHardware"] is False
+    assert "prompt" not in agents["builder"]
+    assert "source" not in agents["builder"]
 
 
 def test_a_websocket_without_the_token_never_opens(env):

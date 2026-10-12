@@ -14,8 +14,10 @@ URL fetcher.
 from __future__ import annotations
 
 import ipaddress
+import hashlib
 import json
 import socket
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -153,6 +155,7 @@ class NativeWebResearchSession:
     policy: ResearchToolPolicy = field(default_factory=ResearchToolPolicy)
     provider: HttpsPdfProvider = field(default_factory=HttpsPdfProvider)
     _by_url: dict[str, SearchResult] = field(default_factory=dict, init=False, repr=False)
+    _started_monotonic: float = field(default_factory=time.monotonic, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.tools = ResearchTools(self.provider, self.store, policy=self.policy)
@@ -290,6 +293,65 @@ class NativeWebResearchSession:
                 if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= len(pages):
                     raise ResearchToolError("SourcePacket citation page is outside its PDF")
 
+    def validate_plan_findings(self, plan: dict[str, Any]) -> None:
+        """Ensure simple Lead facts cite PDFs collected in this exact turn."""
+        for finding in plan.get("research_findings") or []:
+            if not isinstance(finding, dict):
+                raise ResearchToolError("Plan has a malformed research finding")
+            for citation in finding.get("citations") or []:
+                if not isinstance(citation, dict):
+                    raise ResearchToolError("Plan has a malformed research citation")
+                document_id = citation.get("document_id")
+                page = citation.get("page")
+                pages = self.store.pages(str(document_id or ""))
+                if (
+                    not isinstance(page, int)
+                    or isinstance(page, bool)
+                    or not 1 <= page <= len(pages)
+                ):
+                    raise ResearchToolError(
+                        "Plan research citation page is outside its collected PDF"
+                    )
+
+    def summary(self, plan: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return bounded per-turn usage for the durable research ledger."""
+
+        traces = self.tools.trace()
+        document_ids = sorted(
+            {
+                str(document)
+                for trace in traces
+                for document in trace.get("selected_document_ids", [])
+                if document
+            }
+        )
+        findings = [
+            item for item in plan.get("research_findings", []) if isinstance(item, dict)
+        ]
+        usage: dict[str, int] = {}
+        for event in events:
+            if event.get("method") == "thread/tokenUsage/updated":
+                _collect_token_counts(event.get("params"), usage)
+        return {
+            "queries": [str(trace.get("query") or "") for trace in traces],
+            "queries_used": len(traces),
+            "urls": sorted(self._by_url),
+            "document_ids": document_ids,
+            "finding_hashes": [
+                hashlib.sha256(
+                    json.dumps(
+                        item,
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                for item in findings
+            ],
+            "tokens": {"input": usage.get("input"), "output": usage.get("output")},
+            "elapsed_s": max(0.0, time.monotonic() - self._started_monotonic),
+        }
+
     @staticmethod
     def _response(success: bool, payload: Any) -> dict[str, Any]:
         return {
@@ -301,3 +363,21 @@ class NativeWebResearchSession:
                 }
             ],
         }
+
+
+def _collect_token_counts(value: Any, usage: dict[str, int]) -> None:
+    """Extract known token counters without pinning one App Server payload shape."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            folded = key.replace("_", "").casefold()
+            if isinstance(child, int) and not isinstance(child, bool) and child >= 0:
+                if folded in {"inputtokens", "inputtokenstotal"}:
+                    usage["input"] = max(usage.get("input", 0), child)
+                elif folded in {"outputtokens", "outputtokenstotal"}:
+                    usage["output"] = max(usage.get("output", 0), child)
+            elif isinstance(child, (dict, list)):
+                _collect_token_counts(child, usage)
+    elif isinstance(value, list):
+        for child in value:
+            _collect_token_counts(child, usage)

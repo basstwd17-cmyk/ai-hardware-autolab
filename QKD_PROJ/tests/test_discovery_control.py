@@ -110,7 +110,7 @@ def test_mission_accepts_a_reviewed_contract_as_a_baseline(tmp_path):
     preview = control.preflight(scenario)
     assert preview["status"] == "ready"
 
-    answer = control.mission(
+    answer = control.legacy_mission(
         "improve the known implementation",
         scenario,
         preview["scenario_sha256"],
@@ -118,10 +118,11 @@ def test_mission_accepts_a_reviewed_contract_as_a_baseline(tmp_path):
     )
 
     brief = ledger.handoffs(answer["job"]["job_id"], "Brief", 0)[0].payload
-    assert brief["resources"]["workflow"] == "mission"
+    assert brief["resources"]["workflow"] == "simple-mission"
     assert brief["resources"]["selected_contract"]["name"] == "known-gate.yaml"
     assert brief["resources"]["search_policy"] == "refresh"
-    assert "design-builder" in brief["resources"]["available_execution_agents"]
+    assert brief["resources"]["available_execution_agents"] == ["builder", "verifier"]
+    assert brief["resources"]["agent_flow"] == ["lead-agent", "builder", "verifier"]
 
 
 def test_mission_accepts_a_contract_gap_and_refuses_an_unknown_search_policy(tmp_path):
@@ -131,7 +132,7 @@ def test_mission_accepts_a_contract_gap_and_refuses_an_unknown_search_policy(tmp
     preview = control.preflight(scenario)
     assert preview["status"] == "contract_gap"
 
-    answer = control.mission("new interface", scenario, preview["scenario_sha256"], "always")
+    answer = control.legacy_mission("new interface", scenario, preview["scenario_sha256"], "always")
     brief = ledger.handoffs(answer["job"]["job_id"], "Brief", 0)[0].payload
     assert brief["resources"]["selected_contract"] is None
     assert brief["resources"]["search_policy"] == "always"
@@ -155,7 +156,7 @@ def test_mission_derives_one_offline_contract_from_ambiguous_parents(tmp_path):
     assert preview["status"] == "contract_gap"
     assert preview["reason_code"] == "ambiguous_contract"
 
-    answer = control.mission(
+    answer = control.legacy_mission(
         "implement the scenario-specific buffer",
         scenario,
         preview["scenario_sha256"],
@@ -217,7 +218,7 @@ def test_discover_crosses_the_actual_named_pipe(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="the production local transport is a Windows pipe")
-def test_mission_crosses_the_locked_actual_named_pipe(tmp_path):
+def test_mission_crosses_the_locked_actual_named_pipe(tmp_path, monkeypatch):
     preflight = ambiguous_engine(tmp_path)
     name = rf"\\.\pipe\qkd-mission-{time.time_ns()}"
     args = argparse.Namespace(
@@ -238,6 +239,11 @@ def test_mission_crosses_the_locked_actual_named_pipe(tmp_path):
         knowledge_hardware="rtase-v1",
         knowledge_revision="v1.0",
     )
+    from QKD_PROJ.orchestrator.workspace import WorkspaceManager
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    args.workspace_root = str(tmp_path / "workspaces")
+    monkeypatch.setattr(WorkspaceManager, "prepare", lambda *_: workspace)
     service, _ = CLI.build_service(args)
     service.config.install_signal_handlers = False
     scenario = "Without hardware, implement a BBB DMA random 2bit memory buffer."
@@ -257,5 +263,6 @@ def test_mission_crosses_the_locked_actual_named_pipe(tmp_path):
     assert answer["type"] == "command.result"
     assert answer["commandId"] == "mission-over-real-pipe"
     brief = service.ledger.handoffs(answer["job"]["job_id"], "Brief", 0)[0].payload
-    assert brief["resources"]["contract_resolution"]["mode"] == "derive"
+    assert brief["workflow"] == "conversation-prototype-v1"
+    assert brief["inputs"]["intake_version"] == 1
     assert service.transport_error is None

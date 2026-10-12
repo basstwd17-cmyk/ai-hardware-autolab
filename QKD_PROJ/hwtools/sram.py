@@ -77,9 +77,10 @@ class ApprovedCandidate:
     raw_sha256: str
     design_sha256: str
     source_sha256: dict[str, str]
-    approved_by: str
-    approved_on: str
-    execution_number: int
+    approved_by: str | None
+    approved_on: str | None
+    execution_number: int | None
+    authorization_source: str = "legacy_candidate_approval"
 
 
 def parse_pgrcmd_program_log(text: str) -> PgrcmdProgramLog:
@@ -116,7 +117,7 @@ def validate_program_xcf(path: Path, gate: SafetyGate) -> ProgramXcf:
         raise SramProgramError(f"Unexpected XCF root element: {_tag(root)}")
 
     devices = [node for node in root.iter() if _tag(node) == "Device"]
-    expected_count = int(gate.pass_criteria().get("expected_device_count", 1))
+    _, expected_count = _program_identity(gate)
     if len(devices) != expected_count or expected_count != 1:
         raise SramProgramError(
             f"Program XCF must contain exactly one device; found {len(devices)}."
@@ -226,51 +227,64 @@ def program_cpld_sram(
     diamond_root: Path | None = None,
     timeout_s: float = 120.0,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    workspace_root: Path | None = None,
 ) -> ToolResult:
-    """Program one explicitly approved Gate 1 bitstream into volatile SRAM."""
+    """Program one validated volatile SRAM bitstream.
+
+    ``workspace_root`` is used by scenario conversations.  The XCF and its
+    bitstream may be newly produced by the Builder, but both must stay inside
+    that isolated workspace.  Historical callers retain the pinned-candidate
+    checks.
+    """
     started = time.monotonic()
     result = ToolResult(tool="cpld", action="program_sram")
     try:
         gate.require("sram_fast_program")
         _require_passing_scan(scan_result, gate)
-        candidate = _approved_candidate(gate)
-        approved_hash = candidate.raw_sha256
         xcf = validate_program_xcf(program_xcf, gate)
-        if xcf.bitstream != candidate.bitstream:
-            raise SramProgramError(
-                f"Program XCF names {xcf.bitstream}, but Approval 2 names "
-                f"{candidate.bitstream}."
-            )
         actual_hash = sha256_file(xcf.bitstream)
-        if actual_hash != approved_hash:
-            raise SramProgramError(
-                "Bitstream raw SHA-256 does not match the explicitly approved hash: "
-                f"{actual_hash} != {approved_hash}."
-            )
-
-        expected_design_hash = candidate.design_sha256
         actual_design_hash = design_sha256(xcf.bitstream)
-        if actual_design_hash != expected_design_hash:
-            raise SramProgramError(
-                "Bitstream design SHA-256 does not match the Gate 1 design: "
-                f"{actual_design_hash} != {expected_design_hash}."
-            )
-        header = _validate_bitstream_header(xcf.bitstream, gate)
-        source_hashes = _validate_candidate_sources(candidate, gate)
+        if workspace_root is not None:
+            root = Path(workspace_root).resolve(strict=True)
+            if not xcf.path.is_relative_to(root) or not xcf.bitstream.is_relative_to(root):
+                raise SramProgramError("Program XCF and bitstream must stay inside the job workspace")
+            source_hashes = {}
+            authorization = None
+            header = _validate_bitstream_header(xcf.bitstream, gate, expected_top=None)
+        else:
+            candidate = _approved_candidate(gate)
+            approved_hash = candidate.raw_sha256
+            if xcf.bitstream != candidate.bitstream:
+                raise SramProgramError(
+                    f"Program XCF names {xcf.bitstream}, but Approval 2 names "
+                    f"{candidate.bitstream}."
+                )
+            if actual_hash != approved_hash:
+                raise SramProgramError(
+                    "Bitstream raw SHA-256 does not match the explicitly approved hash: "
+                    f"{actual_hash} != {approved_hash}."
+                )
+            if actual_design_hash != candidate.design_sha256:
+                raise SramProgramError(
+                    "Bitstream design SHA-256 does not match the Gate 1 design: "
+                    f"{actual_design_hash} != {candidate.design_sha256}."
+                )
+            header = _validate_bitstream_header(xcf.bitstream, gate)
+            source_hashes = _validate_candidate_sources(candidate, gate)
+            authorization = {
+                "source": candidate.authorization_source,
+                "approved_by": candidate.approved_by,
+                "approved_on": candidate.approved_on,
+                "execution_number": candidate.execution_number,
+            }
 
         result.measurements.update(
             {
-                "approved_bitstream_sha256": approved_hash,
                 "programmed_bitstream_sha256": actual_hash,
                 "bitstream_design_sha256": actual_design_hash,
                 "bitstream_bytes": xcf.bitstream.stat().st_size,
                 "bitstream_header": header,
                 "source_sha256": source_hashes,
-                "approval": {
-                    "approved_by": candidate.approved_by,
-                    "approved_on": candidate.approved_on,
-                    "execution_number": candidate.execution_number,
-                },
                 "program_xcf_sha256": sha256_file(xcf.path),
                 "device": xcf.device,
                 "expected_idcode": xcf.idcode,
@@ -280,6 +294,11 @@ def program_cpld_sram(
                 "jedec_checksum": xcf.jedec_checksum,
             }
         )
+        if authorization is None:
+            result.measurements["scenario_delegation"] = "submitted_hardware_scenario"
+        else:
+            result.measurements["approved_bitstream_sha256"] = approved_hash
+            result.measurements["approval"] = authorization
         pgrcmd = _find_pgrcmd(Path(diamond_root or DEFAULT_DIAMOND_ROOT))
         result.versions["diamond_root"] = str(pgrcmd.parents[2])
         run = runner or subprocess.run
@@ -383,8 +402,7 @@ def program_cpld_sram(
 
 
 def _require_passing_scan(scan: ToolResult, gate: SafetyGate) -> None:
-    expected_id = normalize_idcode(gate.pass_criteria()["expected_idcode"])
-    expected_count = int(gate.pass_criteria()["expected_device_count"])
+    expected_id, expected_count = _program_identity(gate)
     measurements = scan.measurements
     if scan.action != "jtag_scan" or not scan.ok or scan.verdict != PASS:
         raise SramProgramError("A passing jtag_scan ToolResult is required first.")
@@ -396,10 +414,72 @@ def _require_passing_scan(scan: ToolResult, gate: SafetyGate) -> None:
         raise SramProgramError("The preceding scan has the wrong IDCODE.")
 
 
+def _program_identity(gate: SafetyGate) -> tuple[str, int]:
+    """Device identity is a connection constraint, not a functional PASS test."""
+    board_id = normalize_idcode(gate.require_verified("cpld.expected_idcode")["cpld.expected_idcode"])
+    identity = gate.contracts.test_spec.get("jtag") or {}
+    expected_id = normalize_idcode(identity.get("expected_idcode", gate.pass_criteria().get("expected_idcode", board_id)))
+    count = int(identity.get("expected_device_count", gate.pass_criteria().get("expected_device_count", 1)))
+    if expected_id != board_id or count != 1:
+        raise SramProgramError("Programming chain identity must match the verified single-device board")
+    return expected_id, count
+
+
+def program_input_artifacts(gate: SafetyGate, program_xcf: Path) -> dict[str, str]:
+    """Read-only readiness check shared by planning/approval and the driver.
+
+    Does not scan, program, consume an approval, or assert that one was granted.
+    Returns exact local bytes to bind BEFORE exposing an approval request.
+    """
+    data = gate.contracts.test_spec.get("sram_program_candidate")
+    if not isinstance(data, dict) or data.get("immutable") is not True:
+        raise SramProgramError(
+            "Programming boundary lacks a complete immutable sram_program_candidate. "
+            "Reuse the source contract of the verified candidate or supply its actual "
+            "design/source metadata; configuration.candidate path/hash alone is not executable."
+        )
+    candidate = _candidate_identity(gate, data, None, None, None, "preflight_only")
+    xcf = validate_program_xcf(program_xcf, gate)
+    if xcf.bitstream != candidate.bitstream:
+        raise SramProgramError("Program XCF and candidate name different bitstreams")
+    if sha256_file(candidate.bitstream) != candidate.raw_sha256:
+        raise SramProgramError("Candidate raw SHA-256 mismatch")
+    if design_sha256(candidate.bitstream) != candidate.design_sha256:
+        raise SramProgramError("Candidate design SHA-256 mismatch")
+    _validate_bitstream_header(candidate.bitstream, gate)
+    _validate_candidate_sources(candidate, gate)
+    root = (gate.contracts.project_root or gate.contracts.test_spec_path.resolve().parent.parent.parent).resolve()
+    paths = [candidate.bitstream, xcf.path]
+    paths.extend(root / str(p) for p in gate.contracts.test_spec["test_design"]["sources"].values())
+    result = {}
+    for path in paths:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(root):
+            raise SramProgramError("Program input escapes project root")
+        result[resolved.relative_to(root).as_posix()] = sha256_file(resolved)
+    return result
+
+
 def _approved_candidate(gate: SafetyGate) -> ApprovedCandidate:
     data = gate.contracts.test_spec.get("sram_program_candidate")
     if not isinstance(data, dict):
         raise SramProgramError("Contract has no sram_program_candidate section.")
+    delegated = gate.allow_hardware and gate.delegated_operation == "sram_fast_program"
+    if delegated:
+        # The broker already consumed the current job's delegated attempt.
+        # Do not require stale Approval 2 counters or manufacture a human
+        # signature inside YAML. Image/source/chain/SRAM checks below remain.
+        approved_by, approved_on, execution_number = None, None, None
+    else:
+        approved_by, approved_on, execution_number = _legacy_candidate_approval(data)
+    if data.get("immutable") is not True:
+        raise SramProgramError("The approved candidate is not marked immutable.")
+
+    return _candidate_identity(gate, data, approved_by, approved_on, execution_number,
+                               "bound_device_dispatch" if delegated else "legacy_candidate_approval")
+
+
+def _legacy_candidate_approval(data: dict) -> tuple[str, str, int]:
     max_executions = int(data.get("approval_max_executions", 0))
     executions_used = int(data.get("approval_executions_used", 0))
     if data.get("status") == "executed" and executions_used >= max_executions > 0:
@@ -421,9 +501,10 @@ def _approved_candidate(gate: SafetyGate) -> ApprovedCandidate:
         raise SramProgramError(
             f"Approval 2 has no executions remaining ({executions_used}/{max_executions})."
         )
-    if data.get("immutable") is not True:
-        raise SramProgramError("The approved candidate is not marked immutable.")
+    return approved_by, approved_on, executions_used + 1
 
+
+def _candidate_identity(gate, data, approved_by, approved_on, execution_number, authorization_source):
     raw_hash = str(data.get("bitstream_sha256") or "").lower()
     candidate_design_hash = str(data.get("bitstream_design_sha256") or "").lower()
     build_design_hash = str(
@@ -443,8 +524,8 @@ def _approved_candidate(gate: SafetyGate) -> ApprovedCandidate:
             "Approved candidate design hash differs from build_result design hash."
         )
 
-    project_root = gate.contracts.test_spec_path.resolve().parent.parent
-    repo_root = project_root.parent
+    repo_root = (gate.contracts.project_root or gate.contracts.test_spec_path.resolve().parent.parent).resolve()
+    project_root = repo_root / "QKD_PROJ"
     candidate_root = (project_root / "candidates").resolve()
     directory = (repo_root / str(data.get("directory") or "")).resolve()
     try:
@@ -475,15 +556,16 @@ def _approved_candidate(gate: SafetyGate) -> ApprovedCandidate:
         source_sha256={str(k): str(v).lower() for k, v in source_hashes.items()},
         approved_by=approved_by,
         approved_on=approved_on,
-        execution_number=executions_used + 1,
+        execution_number=execution_number,
+        authorization_source=authorization_source,
     )
 
 
 def _validate_candidate_sources(
     candidate: ApprovedCandidate, gate: SafetyGate
 ) -> dict[str, str]:
-    project_root = gate.contracts.test_spec_path.resolve().parent.parent
-    repo_root = project_root.parent
+    repo_root = (gate.contracts.project_root or gate.contracts.test_spec_path.resolve().parent.parent).resolve()
+    project_root = repo_root / "QKD_PROJ"
     declared = gate.contracts.test_spec.get("test_design", {}).get("sources") or {}
     if not isinstance(declared, dict) or not declared:
         raise SramProgramError("Contract test_design.sources is missing.")
@@ -519,7 +601,9 @@ def _validate_candidate_sources(
     return actual
 
 
-def _validate_bitstream_header(bitstream: Path, gate: SafetyGate) -> dict[str, str]:
+def _validate_bitstream_header(
+    bitstream: Path, gate: SafetyGate, *, expected_top: str | None = "profile"
+) -> dict[str, str]:
     text = bitstream.read_bytes()[:2048].decode("latin-1", errors="replace")
     fields: dict[str, str] = {}
     for name in ("Design name", "Part", "Readback", "Security", "Bitstream CRC"):
@@ -528,12 +612,13 @@ def _validate_bitstream_header(bitstream: Path, gate: SafetyGate) -> dict[str, s
             raise SramProgramError(f"Bitstream header has no {name!r} field.")
         fields[name] = match.group(1).strip()
     expected_device = str(gate.contracts.board_map["cpld"]["device"])
-    expected_top = str(gate.contracts.test_spec["test_design"]["top"])
+    if expected_top == "profile":
+        expected_top = str(gate.contracts.test_spec["test_design"]["top"])
     if not fields["Part"].startswith(expected_device):
         raise SramProgramError(
             f"Bitstream part is {fields['Part']!r}; expected {expected_device}."
         )
-    if not fields["Design name"].startswith(expected_top):
+    if expected_top is not None and not fields["Design name"].startswith(expected_top):
         raise SramProgramError(
             f"Bitstream design is {fields['Design name']!r}; expected {expected_top}."
         )
@@ -542,6 +627,22 @@ def _validate_bitstream_header(bitstream: Path, gate: SafetyGate) -> dict[str, s
             "SRAM bitstream must have Readback=Off and Security=Off."
         )
     return fields
+
+
+def workspace_program_input_artifacts(
+    gate: SafetyGate, program_xcf: Path, workspace_root: Path
+) -> dict[str, str]:
+    """Validate and hash a scenario-produced XCF and bitstream before JTAG contact."""
+    root = Path(workspace_root).resolve(strict=True)
+    xcf = validate_program_xcf(program_xcf, gate)
+    for path in (xcf.path, xcf.bitstream):
+        if not path.is_relative_to(root):
+            raise SramProgramError("Program input escapes the job workspace")
+    _validate_bitstream_header(xcf.bitstream, gate, expected_top=None)
+    return {
+        xcf.path.relative_to(root).as_posix(): sha256_file(xcf.path),
+        xcf.bitstream.relative_to(root).as_posix(): sha256_file(xcf.bitstream),
+    }
 
 
 def _finish(

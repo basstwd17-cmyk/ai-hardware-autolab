@@ -889,6 +889,12 @@ class Service:
         campaign_controller: CampaignController | None = None,
         capability_catalog: CapabilityCatalog | None = None,
         board_catalog: BoardCatalog | None = None,
+        hardware_profile: Any | None = None,
+        hardware_connections: Any | None = None,
+        hardware_registry: Any | None = None,
+        hardware_executor: Any | None = None,
+        runtime_runner: Any | None = None,
+        project_registry: Any | None = None,
     ) -> None:
         self.ledger = ledger
         self.daemon = daemon
@@ -907,10 +913,20 @@ class Service:
             campaign_controller=campaign_controller,
             capability_catalog=capability_catalog,
             board_catalog=board_catalog,
+            hardware_profile=hardware_profile,
+            hardware_connections=hardware_connections,
+            hardware_registry=hardware_registry,
+            hardware_executor=hardware_executor,
+            hardware_enabled=self.config.runtime_profile == "hardware",
+            project_registry=project_registry,
         )
         self.knowledge_store = knowledge_store
         self.knowledge_scope = knowledge_scope
+        from QKD_PROJ.knowledge.conversation_ingestor import ConversationKnowledgeIngestor
+        self.knowledge_ingestor = (ConversationKnowledgeIngestor(ledger, knowledge_store, knowledge_scope)
+                                   if knowledge_store is not None and knowledge_scope is not None else None)
         self.campaign_controller = campaign_controller
+        self.runtime_runner = runtime_runner
         self.started_at: str | None = None
         self.ticks = 0
         self._server: threading.Thread | None = None
@@ -979,7 +995,7 @@ class Service:
         connection = Connection(
             channel,
             self.ledger,
-            _LockedControl(self.control, self._turn),
+            _LockedControl(self.control, self._turn, self._interrupt_job),
             self.stopping,
             poll_s=self.config.poll_s,
             runs_dir=self.config.runs_dir,
@@ -991,6 +1007,22 @@ class Service:
         thread.start()
         self._connections.append(thread)
         self._connection_objects.append(connection)
+
+    def _interrupt_job(self, job_id: str) -> bool:
+        """Best-effort runtime interruption; the ledger cancellation is authoritative."""
+        conversation = getattr(self.daemon.loop, "conversation", None)
+        owner = (conversation.runtime if conversation is not None and conversation.owns(job_id)
+                 else self.runtime_runner)
+        cancel = getattr(owner, "cancel", None)
+        if not callable(cancel):
+            return False
+        try:
+            return bool(cancel(job_id))
+        except Exception:
+            # A broken runtime must not be able to veto the durable stop. The
+            # control plane will still close the job and the scheduler will
+            # never dispatch another step for it.
+            return False
 
     def _install_signals(self) -> None:
         import signal
@@ -1032,7 +1064,13 @@ class Service:
     def tick_once(self) -> D.Tick:
         with self._turn:
             self.ticks += 1
-            return self.daemon.tick(self.now())
+            if self.knowledge_ingestor is not None:
+                self.knowledge_ingestor.sync()
+            try:
+                return self.daemon.tick(self.now())
+            finally:
+                if self.knowledge_ingestor is not None:
+                    self.knowledge_ingestor.sync()
 
     def sleep_for(self, tick: D.Tick, now: str | None = None) -> float:
         """How long to wait before looking again, from what the survey said."""
@@ -1068,9 +1106,15 @@ class _LockedControl:
     landing between a tick's survey and the advance it decided on.
     """
 
-    def __init__(self, control: ControlPlane, lock: threading.RLock) -> None:
+    def __init__(
+        self,
+        control: ControlPlane,
+        lock: threading.RLock,
+        interrupt_job: Callable[[str], bool] | None = None,
+    ) -> None:
         self._control = control
         self._lock = lock
+        self._interrupt_job = interrupt_job or (lambda _job_id: False)
 
     def __getattr__(self, name: str) -> Any:
         """Lock public control calls added after this proxy was written.
@@ -1093,6 +1137,29 @@ class _LockedControl:
         return locked
 
     def handle(self, request: Any) -> dict[str, Any]:
+        # A model turn can take minutes.  Reads of the append-only ledger must
+        # not sit behind that turn: otherwise the office keeps receiving the
+        # live event stream while its transcript API appears to be frozen.
+        # These commands neither mutate the ledger nor grant a capability; the
+        # ledger's own transactions give each a consistent read.
+        if isinstance(request, dict) and request.get("command") in {
+            "ping", "status", "job", "handoffs", "events", "inbox", "models-list", "hardware-status", "hardware-catalog",
+        }:
+            return self._control.handle(request)
+        # Starts a background identity check; the hardware adapter owns its
+        # device lock, so UI commands never wait for a model/programming turn.
+        if isinstance(request, dict) and request.get("command") in {"hardware-check", "hardware-discover", "hardware-register"}:
+            return self._control.handle(request)
+        if isinstance(request, dict) and request.get("command") == "cancel":
+            job_id = str(request.get("job_id") or "")
+            result = self._control.handle(request)
+            if result.get("ok"):
+                self._interrupt_job(job_id)
+            return result
+        if isinstance(request, dict) and request.get("command") == "steer":
+            conversation = getattr(getattr(self._control.daemon, "loop", None), "conversation", None)
+            if conversation is not None and conversation.owns(str(request.get("job_id") or "")):
+                return self._control.handle(request)
         with self._lock:
             return self._control.handle(request)
 
@@ -1109,12 +1176,21 @@ class _LockedControl:
             return self._control.preflight(*args, **kwargs)
 
     def steer(self, *args: Any, **kwargs: Any) -> Any:
+        job_id = str(args[0] if args else kwargs.get("job_id") or "")
+        conversation = getattr(getattr(self._control.daemon, "loop", None), "conversation", None)
+        if conversation is not None and conversation.owns(job_id):
+            return self._control.steer(*args, **kwargs)
         with self._lock:
             return self._control.steer(*args, **kwargs)
 
     def cancel(self, *args: Any, **kwargs: Any) -> Any:
-        with self._lock:
-            return self._control.cancel(*args, **kwargs)
+        job_id = str(args[0] if args else kwargs.get("job_id") or "")
+        # Cancellation is deliberately out-of-band. Waiting for ``_lock``
+        # here would make a stop button wait for the very model turn it is
+        # supposed to stop.
+        result = self._control.cancel(*args, **kwargs)
+        self._interrupt_job(job_id)
+        return result
 
 
 # -- clients -----------------------------------------------------------------

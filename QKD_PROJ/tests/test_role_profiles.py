@@ -49,25 +49,28 @@ def test_every_role_has_both_a_tool_row_and_an_effect_row():
     assert set(ROLE_TOOLS) == set(ROLE_EFFECTS)
 
 
-def test_role_names_are_the_agent_names():
-    """Two vocabularies for the same actors is one too many."""
+def test_role_names_cover_runtime_and_legacy_agent_names():
+    """The server recognises the new team and historical job definitions."""
     from QKD_PROJ.agents import load_all
+    from QKD_PROJ.agents.schema import load_simple_team
 
-    assert set(ROLE_TOOLS) == {a.name for a in load_all()}
+    assert set(ROLE_TOOLS) == {
+        a.name for a in [*load_all(), *load_simple_team()]
+    }
 
 
-def test_only_the_operator_may_change_the_board():
+def test_only_the_builder_or_legacy_operator_may_change_the_board():
     for role, tools in ROLE_TOOLS.items():
         overlap = tools & STATE_CHANGING
-        if role == "board-operator":
+        if role in {"builder", "board-operator"}:
             assert overlap == STATE_CHANGING
         else:
             assert overlap == set(), f"{role} carries {overlap}"
 
 
-def test_only_the_operator_may_run_mutating_scripts():
+def test_only_the_builder_or_legacy_operator_may_run_mutating_scripts():
     for role, effects in ROLE_EFFECTS.items():
-        if role == "board-operator":
+        if role in {"builder", "board-operator"}:
             assert MUTATE in effects
         else:
             assert effects == frozenset({READ}), role

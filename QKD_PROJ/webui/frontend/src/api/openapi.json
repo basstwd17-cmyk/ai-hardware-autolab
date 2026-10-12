@@ -73,6 +73,11 @@
             "title": "Skills",
             "type": "array"
           },
+          "team": {
+            "description": "one of the seven user-facing agent teams",
+            "title": "Team",
+            "type": "string"
+          },
           "touchesHardware": {
             "title": "Toucheshardware",
             "type": "boolean"
@@ -80,6 +85,7 @@
         },
         "required": [
           "name",
+          "team",
           "role",
           "description",
           "mcpTools",

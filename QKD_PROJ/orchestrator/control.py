@@ -32,11 +32,14 @@ handoffs an agent *that was given the steering* produced count as proof. See
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from QKD_PROJ.capabilities.catalog import CapabilityCatalog, CapabilityCatalogError
+from QKD_PROJ.capabilities.matcher import match_capabilities
 from QKD_PROJ.boards.profiles import BoardCatalog, BoardProfileError
+from QKD_PROJ.boards.hardware import HardwareProfile
 from QKD_PROJ.knowledge.models import KnowledgeScope, KnowledgeValidationError
 from QKD_PROJ.knowledge.retriever import KnowledgeRetriever
 from QKD_PROJ.knowledge.store import KnowledgeStore, KnowledgeStoreError
@@ -56,8 +59,10 @@ from QKD_PROJ.orchestrator.jobs import JobLedger, JobLedgerError
 from QKD_PROJ.orchestrator.pagination import iter_events, tail_since
 from QKD_PROJ.orchestrator.remote_summary import build_remote_snapshot
 from QKD_PROJ.orchestrator.scenario_preflight import PreflightError, ScenarioPreflight
-from QKD_PROJ.research.discovery_loop import MISSION_GATE, start_discovery, start_mission
+from QKD_PROJ.research.discovery_loop import MISSION_GATE, start_discovery
 from QKD_PROJ.research.mission import SEARCH_POLICIES
+from QKD_PROJ.orchestrator.simple_mission import start_simple_mission
+from QKD_PROJ.orchestrator.model_selection import ModelCatalog
 
 # Control events. Namespaced away from the ledger's own kinds for the same
 # reason the runtime's are: a reader must be able to tell who said a thing.
@@ -90,6 +95,13 @@ class ControlPlane:
     campaign_proposer: CampaignProposalService | None = None
     capability_catalog: CapabilityCatalog | None = None
     board_catalog: BoardCatalog | None = None
+    hardware_profile: HardwareProfile | None = None
+    hardware_connections: Any | None = None
+    hardware_registry: Any | None = None
+    hardware_executor: Any | None = None
+    hardware_enabled: bool = False
+    project_registry: Any | None = None
+    model_catalog: ModelCatalog = field(default_factory=ModelCatalog)
 
     def __post_init__(self) -> None:
         if self.knowledge_retriever is None and self.knowledge_store is not None:
@@ -116,10 +128,24 @@ class ControlPlane:
         state = self.ledger.resume(job_id)
         if self.daemon is not None:
             state["waiting"] = self.daemon.waiting_for(job_id).describe()
+            # ``JobLedger.resume`` intentionally treats every RUNNING row as a
+            # possible crash remnant because the ledger cannot see a process.
+            # The live control plane can: the scheduler publishes the one job
+            # whose turn it currently owns. Do not tell the UI that healthy
+            # live work was abandoned by a previous daemon.
+            state["interrupted"] = bool(
+                state.get("interrupted") and not self.daemon.is_active(job_id)
+            )
         state["pending_steers"] = pending_steers(self.ledger, job_id)
         state["will_deliver_steering"] = will_deliver_steering(
             self.ledger, job_id, self._max_iterations()
         )
+        conversation = getattr(getattr(self.daemon, "loop", None), "conversation", None)
+        if conversation is not None and conversation.owns(job_id):
+            phase = conversation.phase(job_id)
+            state["interrupted"] = phase.action == "interrupted"
+            state["workflow"] = "conversation"
+            state["phase"] = phase.action
         return state
 
     def handoffs(self, job_id: str) -> dict[str, Any]:
@@ -174,7 +200,10 @@ class ControlPlane:
         return snapshot
 
     def campaign_catalog(self) -> dict[str, Any]:
-        return {"campaigns": self._campaign_controller().catalog()}
+        return {
+            "campaigns": self._campaign_controller().catalog(),
+            "candidates": self._campaign_proposer().candidates(),
+        }
 
     def campaign_status(self) -> dict[str, Any]:
         return self._campaign_controller().status()
@@ -214,6 +243,7 @@ class ControlPlane:
         max_iterations: int = 8,
         max_auto_approvals: int = 24,
         duration_hours: int = 12,
+        authorization_scope: str = "scenario",
     ) -> dict[str, Any]:
         try:
             return self._campaign_proposer().preview(
@@ -221,6 +251,7 @@ class ControlPlane:
                 max_iterations=max_iterations,
                 max_auto_approvals=max_auto_approvals,
                 duration_hours=duration_hours,
+                authorization_scope=authorization_scope,
             ).describe()
         except CampaignProposalError as exc:
             raise ControlError(str(exc)) from exc
@@ -234,6 +265,7 @@ class ControlPlane:
         max_iterations: int = 8,
         max_auto_approvals: int = 24,
         duration_hours: int = 12,
+        authorization_scope: str = "scenario",
         comment: str = "",
     ) -> dict[str, Any]:
         try:
@@ -244,6 +276,7 @@ class ControlPlane:
                 max_iterations=max_iterations,
                 max_auto_approvals=max_auto_approvals,
                 duration_hours=duration_hours,
+                authorization_scope=authorization_scope,
             )
             router = getattr(self.daemon, "loop", None)
             continue_completed = getattr(router, "continue_completed", None)
@@ -299,8 +332,23 @@ class ControlPlane:
 
     # -- changing --------------------------------------------------------
 
-    def preflight(self, scenario: str) -> dict[str, Any]:
+    def _selected_hardware(self, selected=None):
+        if self.hardware_registry is not None:
+            return self.hardware_registry.resolve(selected)
+        if selected is not None:
+            from QKD_PROJ.boards.registry import selection
+            chosen = selection(selected)
+            if self.hardware_profile is None or chosen != {"board_id": self.hardware_profile.board_id, "revision": self.hardware_profile.revision}:
+                raise ControlError("this daemon has no registry for the selected hardware setup")
+        return self.hardware_profile
+
+    def preflight(self, scenario: str, *, hardware_selection=None) -> dict[str, Any]:
         try:
+            if getattr(getattr(self.daemon, "loop", None), "conversation", None) is not None:
+                from .conversation_service import prepare_intake
+                return prepare_intake(scenario, self._preflight_engine(),
+                    board_catalog=self.board_catalog, hardware_profile=self._selected_hardware(hardware_selection),
+                    hardware_enabled=self.hardware_enabled)[0]
             return self._preflight_engine().inspect(scenario)
         except PreflightError as exc:
             raise ControlError(str(exc)) from exc
@@ -437,21 +485,70 @@ class ControlPlane:
         return {"job": job.describe(), "preflight": preview}
 
     def mission(
+        self, objective: str, scenario: str, scenario_sha256: str,
+        search_policy: str = "refresh", *, model_selection=None, hardware_selection=None, project_id=None,
+    ) -> dict[str, Any]:
+        """All new scenarios enter one conversation; old jobs keep their Brief."""
+        from .conversation_service import prepare_intake
+        try:
+            selected_models = self.model_catalog.validate(model_selection)
+            if search_policy not in SEARCH_POLICIES:
+                raise PreflightError(f"search_policy must be one of {list(SEARCH_POLICIES)}")
+            engine = self._preflight_engine()
+            engine.verify_scenario(scenario, scenario_sha256)
+            if not scenario.strip() or not objective.strip():
+                raise PreflightError("a scenario and objective are required")
+            conversation = getattr(getattr(self.daemon, "loop", None), "conversation", None)
+            if conversation is None:
+                raise ControlError("신규 작업에는 대화 실행기가 필요합니다. 작업공간이 설정된 데몬으로 시작해주세요.")
+            project = self.project_registry.resolve(project_id) if self.project_registry is not None else None
+            if project_id is not None and project is None:
+                raise ControlError("this daemon has no project registry")
+            mode = engine._execution_mode(scenario, None)
+            # A source-only job has no implicit RTASE/board context.
+            implicit_lab = (project is None or self.hardware_registry is None
+                            or Path(project["root"]).resolve() == self.hardware_registry.root)
+            profile = self._selected_hardware(hardware_selection) if hardware_selection is not None or (mode == "hardware" and implicit_lab) else None
+            preview, inputs = prepare_intake(scenario, engine,
+                board_catalog=self.board_catalog, hardware_profile=profile,
+                hardware_enabled=self.hardware_enabled)
+            if project is not None:
+                inputs["project"] = project
+                preview["project"] = project
+            # A repeated submission reuses only a live conversation; never
+            # reinterpret an old simple/discovery job as the new workflow.
+            for existing in self.ledger.jobs():
+                if existing.state == J.DONE or not conversation.owns(existing.job_id):
+                    continue
+                brief = conversation._brief(existing.job_id)
+                old = brief.get("inputs") or {}
+                if (old.get("scenario_sha256") == scenario_sha256
+                        and old.get("model_selection") == selected_models
+                        and old.get("hardware_selection") == inputs.get("hardware_selection")
+                        and old.get("hardware_profile") == inputs.get("hardware_profile")
+                        and old.get("search_policy") == search_policy
+                        and old.get("project") == inputs.get("project")):
+                    return {"job": existing.describe(), "preflight": preview, "reused": True,
+                            "workflow": "conversation", "execution_mode": brief["execution_mode"]}
+            job = conversation.submit(objective, scenario, scenario_sha256,
+                search_policy, selected_models, execution_mode=preview["execution_mode"], intake=inputs)
+            return {"job": job.describe(), "preflight": preview, "reused": False,
+                    "workflow": "conversation", "execution_mode": preview["execution_mode"]}
+        except (J.JobLedgerError, PreflightError, ValueError, BoardProfileError) as exc:
+            raise ControlError(str(exc)) from exc
+
+    def legacy_mission(
         self,
         objective: str,
         scenario: str,
         scenario_sha256: str,
         search_policy: str = "refresh",
+        *, model_selection: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Open the common front door for new work, improvements and repairs.
-
-        Unlike ``discover``, a mission accepts both a reviewed baseline and a
-        contract gap.  The selected contract and knowledge are inputs to the
-        first agent, never authority to execute: the workflow stops at a
-        reviewed contract proposal.
-        """
+        """Explicit library compatibility entry; never used by mission commands."""
 
         try:
+            selected_models = self.model_catalog.validate(model_selection)
             if search_policy not in SEARCH_POLICIES:
                 raise PreflightError(
                     f"search_policy must be one of {list(SEARCH_POLICIES)}"
@@ -538,37 +635,6 @@ class ControlPlane:
                 and agent.name in requested_roles
                 and (mode == "hardware" or not agent.touches_hardware)
             )
-            if not execution_agents:
-                raise PreflightError("no execution agents are available for this mission scope")
-            agent_tools = {
-                tool
-                for agent in engine.agents
-                if agent.name in execution_agents
-                for tool in agent.mcp_tools
-            }
-            if isinstance(selected_board, dict):
-                profile_tools = {
-                    str(stage["tool"])
-                    for stage in selected_board.get("stages", [])
-                    if isinstance(stage, dict)
-                    and stage.get("status") == "ready"
-                    and isinstance(stage.get("tool"), str)
-                    and (mode == "hardware" or stage.get("mode") != "hardware")
-                }
-                # Read/list tools remain useful to every role.  Effectful
-                # tools must appear in the selected board profile as well as
-                # the role definition.
-                agent_tools = {
-                    tool
-                    for tool in agent_tools
-                    if tool.startswith(("read_", "list_")) or tool in profile_tools
-                }
-            elif self.board_catalog is not None:
-                # An unprofiled board may be researched, but no board-specific
-                # build/upload/measurement adapter is inferred from prose.
-                agent_tools = {
-                    tool for tool in agent_tools if tool.startswith(("read_", "list_"))
-                }
             resources: dict[str, Any] = {
                 "preflight": preview,
                 "selected_contract": selected if isinstance(selected, dict) else None,
@@ -576,7 +642,10 @@ class ControlPlane:
                 "execution_mode": mode,
                 "approval_required": preview.get("approval_required"),
                 "search_policy": search_policy,
-                "available_execution_agents": execution_agents,
+                "available_execution_agents": ["builder", "verifier"],
+                "legacy_execution_agents": execution_agents,
+                "agent_flow": ["lead-agent", "builder", "verifier"],
+                "lead_search_budget": 12,
                 "board_development": board_context,
                 "board_catalog_sha256": (
                     self.board_catalog.digest if self.board_catalog is not None else None
@@ -589,12 +658,24 @@ class ControlPlane:
                         for skill in agent.skills
                     }
                 ),
-                "available_tools": sorted(agent_tools),
+                # This is the ordinary Codex editing/build/test path inside a
+                # per-job workspace.  It is deliberately independent of board
+                # adapters: Lead may create missing offline implementation,
+                # while actual hardware still has to use a profiled MCP tool.
+                "available_tools": self._development_tools(mode),
             }
+            if selected_models:
+                resources["model_selection"] = selected_models
             if self.capability_catalog is not None and mode in ("offline", "hardware"):
                 resources["capability_catalog_sha256"] = self.capability_catalog.digest
+                resources["capability_catalog_source"] = str(self.capability_catalog.source)
                 resources["available_capabilities"] = self.capability_catalog.for_mode(mode)
                 planning_rows = self.capability_catalog.for_planning(mode)
+                resources["capability_candidates"] = match_capabilities(
+                    scenario,
+                    planning_rows,
+                    board=(selected_board if isinstance(selected_board, dict) else None),
+                )
                 resources["deferred_hardware_capabilities"] = [
                     row for row in planning_rows
                     if row.get("mode") == "hardware" and not row.get("available_now")
@@ -620,7 +701,17 @@ class ControlPlane:
                 resources["knowledge_context"] = self.knowledge_retriever.retrieve(
                     scenario, scope, limit=32
                 ).to_dict()
-            job = start_mission(
+            if mode == "hardware" and self.campaign_controller is not None:
+                from .scenario_access import submission_access
+                resources["scenario_access"] = submission_access(
+                    scenario, project_root=self.campaign_controller.project_root,
+                    contracts_dir=self.campaign_controller.contracts_dir,
+                    board_catalog=self.board_catalog,
+                )
+                resources["approval_required"] = False
+                contract_resolution["requires_human_approval"] = False
+                contract_resolution["device_authority"] = "user_scenario"
+            job, reused = start_simple_mission(
                 self.ledger,
                 objective,
                 scenario,
@@ -635,7 +726,7 @@ class ControlPlane:
             ValueError,
         ) as exc:
             raise ControlError(str(exc)) from exc
-        return {"job": job.describe(), "preflight": preview}
+        return {"job": job.describe(), "preflight": preview, "reused": reused}
 
     def promotion_preview(self, job_id: str) -> dict[str, Any]:
         """Compile the exact candidate a person would approve, without writing it."""
@@ -707,7 +798,11 @@ class ControlPlane:
             )
         except JobLedgerError as exc:
             raise ControlError(str(exc)) from exc
-        return {"approval": approval.describe()}
+        resumed = False
+        conversation = getattr(getattr(self.daemon, "loop", None), "conversation", None)
+        if conversation is not None and conversation.owns(approval.job_id):
+            resumed = bool(conversation.approval_decided(approval))
+        return {"approval": approval.describe(), "job_resumed": resumed}
 
     def cancel(self, job_id: str, cancelled_by: str, reason: str = "") -> dict[str, Any]:
         """Stop a job for good, taking its outstanding requests with it."""
@@ -742,6 +837,13 @@ class ControlPlane:
         )
         return {"job": closed.describe(), "withdrawn": withdrawn}
 
+    @staticmethod
+    def _development_tools(mode: str) -> list[str]:
+        from QKD_PROJ.mcp_server.registry import ServerPolicy, build_tools
+        return sorted({"codex_workspace"} | {
+            tool.name for tool in build_tools(ServerPolicy(role="builder", allow_hardware=mode == "hardware"))
+        })
+
     def steer(self, job_id: str, message: str, sent_by: str) -> dict[str, Any]:
         """Leave a message for whichever agent runs next on this job."""
         if not message.strip():
@@ -754,6 +856,16 @@ class ControlPlane:
             raise ControlError(str(exc)) from exc
         if job.state == J.DONE:
             raise ControlError(f"job {job_id} finished as {job.outcome}; there is nobody to steer")
+
+        conversation = getattr(getattr(self.daemon, "loop", None), "conversation", None)
+        if conversation is not None and conversation.owns(job_id):
+            from .conversation_service import prepare_intake
+            return conversation.steer(job_id, message.strip(), sent_by,
+                prepare=lambda scenario, previous: prepare_intake(
+                    scenario, self._preflight_engine(), board_catalog=self.board_catalog,
+                    previous=previous, execution_mode="hardware",
+                    hardware_profile=self._selected_hardware(previous.get("hardware_selection")),
+                    hardware_enabled=self.hardware_enabled)[1])
 
         event = self.ledger.append_event(
             job_id, STEER, {"message": message.strip(), "by": sent_by}, sent_by
@@ -806,13 +918,21 @@ class ControlPlane:
         if not isinstance(scenario, str) or not isinstance(resources, dict):
             raise ControlError("the source mission Brief is malformed")
         revised_resources = dict(resources)
+        # Revising a completed/cancelled job does not renew an expired or
+        # withdrawn device grant. A new Start submission creates new consent.
+        if revised_resources.pop("scenario_access", None) is not None:
+            revised_resources["approval_required"] = True
+            revised_resources["contract_resolution"] = {
+                **revised_resources.get("contract_resolution", {}),
+                "requires_human_approval": True, "device_authority": "new_submission_required",
+            }
         revised_resources["revision_of"] = job_id
         revised_resources["review_feedback"] = {
             "message": message.strip(),
             "by": requested_by.strip(),
         }
         try:
-            revised = start_mission(
+            revised, _reused = start_simple_mission(
                 self.ledger,
                 f"Revise: {source.objective}",
                 scenario,
@@ -840,6 +960,19 @@ class ControlPlane:
 
     # -- dispatch --------------------------------------------------------
 
+    def resume_step(self, job_id: str, requested_by: str, note: str) -> dict[str, Any]:
+        if not requested_by.strip() or not note.strip():
+            raise ControlError('재개 요청자와 해결 내용을 입력하세요')
+        loop = getattr(self.daemon, 'loop', None)
+        if loop is None or not callable(getattr(loop, 'resume_step', None)):
+            raise ControlError('현재 데몬에서 재개 확인을 지원하지 않습니다')
+        if self.daemon.is_active(job_id):
+            raise ControlError('실행 중인 작업은 재개할 수 없습니다')
+        return loop.resume_step(job_id, requested_by, note)
+
+    def _cmd_resume_step(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self.resume_step(_required(request, 'job_id'), _required(request, 'requested_by'), _required(request, 'note'))
+
     def handle(self, request: Any) -> dict[str, Any]:
         """One request object to one response object. Never raises at a caller."""
         if not isinstance(request, dict):
@@ -866,6 +999,63 @@ class ControlPlane:
 
     def _cmd_ping(self, request: dict[str, Any]) -> dict[str, Any]:
         return {"pong": True, "cursor": self.ledger.latest_event_id()}
+
+    def _cmd_hardware_status(self, request: dict[str, Any]) -> dict[str, Any]:
+        connections = self._connections_for(request.get("hardware_selection"))
+        inventory = (connections.snapshot()
+                     if self.hardware_enabled and connections is not None else
+                     {"status": "disabled", "devices": [],
+                      "detail": "Hardware connection checks are unavailable in this daemon"})
+        return {"inventory": inventory}
+
+    def _cmd_hardware_check(self, request: dict[str, Any]) -> dict[str, Any]:
+        connections = self._connections_for(request.get("hardware_selection"))
+        if not self.hardware_enabled or connections is None:
+            raise ControlError("Hardware 연결 확인이 꺼져 있습니다. Hardware 모드와 장비 설정을 확인해주세요.")
+        return {"inventory": connections.start(request.get("devices"))}
+
+    def _connections_for(self, selected):
+        if self.hardware_enabled and self.hardware_executor is not None:
+            return self.hardware_executor.connections_for(selected)
+        if selected is not None:
+            self._selected_hardware(selected)
+        return self.hardware_connections
+
+    def _cmd_hardware_catalog(self, request):
+        if self.hardware_registry is not None:
+            return self.hardware_registry.catalog()
+        profile = self.hardware_profile
+        return {"setups": [profile.public_description()] if profile else [],
+                "default": {"board_id": profile.board_id, "revision": profile.revision} if profile else None}
+
+    def _cmd_hardware_discover(self, request):
+        if self.hardware_registry is None or not self.hardware_enabled or self.hardware_executor is None:
+            raise ControlError("local device discovery requires a Hardware daemon (not dry-run)")
+        return {"discovery": self.hardware_registry.discover()}
+
+    def _cmd_hardware_register(self, request):
+        if self.hardware_registry is None:
+            raise ControlError("hardware registry is not configured")
+        return {"setup": self.hardware_registry.register(request.get("setup"))}
+
+    def _cmd_models_list(self, request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return {"provider": "codex", "models": self.model_catalog.models()}
+        except ValueError as exc:
+            raise ControlError(str(exc)) from exc
+
+    def _cmd_projects_catalog(self, request):
+        if self.project_registry is None:
+            raise ControlError("project connections are not configured")
+        return self.project_registry.catalog()
+
+    def _cmd_projects_register(self, request):
+        if self.project_registry is None:
+            raise ControlError("project connections are not configured")
+        try:
+            return {"project": self.project_registry.register(request.get("project"))}
+        except (ValueError, OSError) as exc:
+            raise ControlError(str(exc)) from exc
 
     def _cmd_status(self, request: dict[str, Any]) -> dict[str, Any]:
         return {"status": self.status(request.get("now"))}
@@ -924,6 +1114,7 @@ class ControlPlane:
                 request, "max_auto_approvals", 24, maximum=256
             ),
             duration_hours=_integer(request, "duration_hours", 12, maximum=72),
+            authorization_scope=request.get("authorization_scope", "scenario"),
         )}
 
     def _cmd_campaign_bundle_approve(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -936,6 +1127,7 @@ class ControlPlane:
                 request, "max_auto_approvals", 24, maximum=256
             ),
             duration_hours=_integer(request, "duration_hours", 12, maximum=72),
+            authorization_scope=request.get("authorization_scope", "scenario"),
             comment=str(request.get("comment", "")),
         )
 
@@ -987,7 +1179,7 @@ class ControlPlane:
             raise ControlError(str(exc)) from exc
 
     def _cmd_preflight(self, request: dict[str, Any]) -> dict[str, Any]:
-        return {"preflight": self.preflight(_required(request, "scenario"))}
+        return {"preflight": self.preflight(_required(request, "scenario"), hardware_selection=request.get("hardware_selection"))}
 
     def _cmd_start(self, request: dict[str, Any]) -> dict[str, Any]:
         return self.start(
@@ -1011,6 +1203,9 @@ class ControlPlane:
             _required(request, "scenario"),
             _required(request, "scenario_sha256"),
             str(request.get("search_policy", "refresh")),
+            model_selection=request.get("model_selection"),
+            hardware_selection=request.get("hardware_selection"),
+            project_id=request.get("project_id"),
         )
 
     def _cmd_contract_promotion_preview(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -1141,7 +1336,7 @@ DELIVERING_HANDOFFS = ("handoff.Plan", "handoff.StepResult")
 
 
 def _is_delivery(event: Any) -> bool:
-    return event.kind in DELIVERING_HANDOFFS
+    return event.kind in DELIVERING_HANDOFFS and not event.payload.get('reused')
 
 
 def pending_steers(ledger: JobLedger, job_id: str) -> list[dict[str, Any]]:
@@ -1156,6 +1351,14 @@ def pending_steers(ledger: JobLedger, job_id: str) -> list[dict[str, Any]]:
     events, so on a job past that bound the newest steer was invisible while
     older ones looked pending forever.
     """
+    from .conversation_flow import WORKFLOW
+    briefs = ledger.handoffs(job_id, "Brief", 0)
+    if briefs and briefs[-1].payload.get("workflow") == WORKFLOW:
+        events = list(iter_events(ledger, job_id))
+        through = max((e.payload.get("feedback_through", 0) for e in events
+                       if e.kind == "conversation.turn.completed"), default=0)
+        return [{"message": e.payload.get("message"), "by": e.payload.get("by"), "event_id": e.event_id}
+                for e in events if e.kind == "conversation.feedback" and e.event_id > through]
     return [
         {"message": e.payload.get("message"), "by": e.payload.get("by"), "event_id": e.event_id}
         for e in tail_since(ledger, job_id, _is_delivery)
@@ -1187,6 +1390,21 @@ def will_deliver_steering(
     """
     job = ledger.job(job_id)
     if job.state == J.DONE:
+        return False
+
+    from .conversation_flow import WORKFLOW
+    briefs = ledger.handoffs(job_id, "Brief", 0)
+    if briefs and briefs[-1].payload.get("workflow") == WORKFLOW:
+        events = list(iter_events(ledger, job_id))
+        starts = [e for e in events if e.kind == "conversation.turn.started"]
+        replies = [e for e in events if e.kind == "conversation.turn.completed"]
+        if job.state == J.BLOCKED:
+            return bool(starts and replies and replies[-1].payload["turn_id"] == starts[-1].event_id
+                        and replies[-1].payload['reply']['status'] == 'needs_user')
+        return True
+
+    from QKD_PROJ.orchestrator.clarification import pending_clarification
+    if pending_clarification(ledger, job_id) is not None and max_iterations is not None and job.iteration >= max_iterations:
         return False
 
     verdicts = ledger.handoffs(job_id, "Verdict", job.iteration)

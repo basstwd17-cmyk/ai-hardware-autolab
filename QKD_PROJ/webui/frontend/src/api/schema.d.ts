@@ -339,6 +339,11 @@ export interface components {
             role: string;
             /** Skills */
             skills: string[];
+            /**
+             * Team
+             * @description one of the seven user-facing agent teams
+             */
+            team: string;
             /** Toucheshardware */
             touchesHardware: boolean;
         };

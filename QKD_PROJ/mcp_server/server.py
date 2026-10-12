@@ -73,6 +73,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--contracts-dir", type=Path, default=CONTRACTS_DIR)
     parser.add_argument("--runs-dir", type=Path, default=RUNS_DIR)
+    parser.add_argument("--hardware-tool", default=None)
+    parser.add_argument("--hardware-contract", default=None)
+    parser.add_argument("--hardware-contract-sha256", default=None)
+    parser.add_argument("--workspace-recipe", default=None)
+    parser.add_argument("--workspace-recipe-sha256", default=None)
+    parser.add_argument("--device-root", type=Path, default=None,
+                        help="approved connection-map root, separate from mutable job source")
     parser.add_argument(
         "--project-root",
         type=Path,
@@ -91,7 +98,13 @@ def main(argv: list[str] | None = None) -> int:
         contracts_dir=args.contracts_dir,
         runs_dir=args.runs_dir,
         project_root=args.project_root,
+        device_root=args.device_root,
         role=args.role,
+        hardware_tool=args.hardware_tool,
+        hardware_contract=args.hardware_contract,
+        hardware_contract_sha256=args.hardware_contract_sha256,
+        workspace_recipe=args.workspace_recipe,
+        workspace_recipe_sha256=args.workspace_recipe_sha256,
     )
     server = build_server(policy)
 

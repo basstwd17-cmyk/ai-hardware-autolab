@@ -62,6 +62,11 @@ class CloudRelayClient:
             "cursor": int(snapshot.get("cursor", 0)),
             "snapshot": snapshot,
         })
+        try:
+            self.sync_knowledge()
+        except Exception as exc:
+            # Read-only replication must not block operator commands.
+            print(f"knowledge sync deferred: {type(exc).__name__}", flush=True)
         polled = self.request("/api/relay/poll", {"deviceId": self.device_id})
         command = polled.get("command")
         if command is None:
@@ -90,6 +95,24 @@ class CloudRelayClient:
             }
         self.request("/api/relay/result", report)
         return {"snapshot": snapshot, "command": command, "result": result}
+
+    def sync_knowledge(self):
+        assert self.request is not None
+        state = self.request("/api/relay/knowledge", {"deviceId": self.device_id})
+        after = state.get("cursor")
+        if type(after) is not int or after < 0:
+            raise CloudRelayError("knowledge endpoint returned no cursor")
+        answer = self._wire({"type": "knowledge.events", "commandId": uuid.uuid4().hex,
+                             "after": after, "limit": 100})
+        knowledge = answer.get("knowledge")
+        if not answer.get("ok") or not isinstance(knowledge, dict):
+            raise CloudRelayError("local knowledge is unavailable")
+        if knowledge["latest"] < after:
+            raise CloudRelayError("local knowledge cursor moved backwards")
+        return self.request("/api/relay/knowledge", {
+            "deviceId": self.device_id, "after": after, "events": knowledge["events"],
+            "latest": knowledge["latest"],
+        })
 
     def run_forever(self) -> None:
         while True:

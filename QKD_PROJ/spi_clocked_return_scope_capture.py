@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from QKD_PROJ.hwtools.instruments.rtm3004 import RTM3004
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +74,7 @@ def run_bbb_transfer() -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
+    require_brokered_entrypoint(__file__)
     parser = argparse.ArgumentParser()
     parser.add_argument("--scope-host", default=DEFAULT_SCOPE_HOST)
     parser.add_argument("--timeout", type=float, default=30.0)

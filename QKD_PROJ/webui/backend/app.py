@@ -45,7 +45,7 @@ from QKD_PROJ.webui.backend.channels import (
     ClientChannel,
 )
 from QKD_PROJ.webui.backend import artifacts as A
-from QKD_PROJ.agents.schema import load_all as load_agent_definitions
+from QKD_PROJ.agents.schema import load_simple_team as load_agent_definitions, team_for_agent
 from QKD_PROJ.webui.backend import models as M
 from QKD_PROJ.webui.backend.facts import Facts, FileFacts
 from QKD_PROJ.webui.backend.graph import GraphProjection
@@ -86,6 +86,14 @@ class FrontendFiles(StaticFiles):
 # rather than forwarded and refused by the daemon, so the refusal says which
 # door it came to.
 ALLOWED_COMMANDS = (
+    W.HARDWARE_STATUS,
+    W.HARDWARE_CHECK,
+    W.HARDWARE_CATALOG,
+    W.HARDWARE_DISCOVER,
+    W.HARDWARE_REGISTER,
+    W.MODELS_LIST,
+    W.PROJECTS_CATALOG,
+    W.PROJECTS_REGISTER,
     W.SCENARIO_PREFLIGHT,
     W.APPROVAL_DECIDE,
     W.JOB_START,
@@ -100,6 +108,7 @@ ALLOWED_COMMANDS = (
     W.JOB_MISSION_REVISE,
     W.JOB_STEER,
     W.JOB_CANCEL,
+    W.JOB_RESUME,
     # Contract installation is still a three-step human workflow. Preview is
     # read-only, request writes a digest-bound approval, and apply succeeds
     # only after that exact approval was granted by a person.
@@ -378,6 +387,7 @@ def create_app(
             "agents": [
                 {
                     "name": agent.name,
+                    "team": team_for_agent(agent.name),
                     "role": agent.role,
                     "description": agent.description,
                     "mcpTools": list(agent.mcp_tools),
@@ -782,11 +792,54 @@ def _remote_html(
             "<li><b>{}</b> → {} <small>{}</small></li>".format(
                 html.escape(str(item.get("role", ""))),
                 html.escape(str(item.get("tool", ""))),
-                html.escape(str(item.get("phase", "hardware"))),
+                html.escape(str(item.get("contract", "")) + " · " + str(item.get("phase", "hardware"))),
             )
             for item in permissions if isinstance(item, dict)
         )
+        safety = (
+            proposal.get("hardware_safety")
+            if isinstance(proposal.get("hardware_safety"), dict)
+            else {}
+        )
+        limit_html = "".join(
+            "<li title=\"{}\">{} · {} ≤ <b>{} {}</b></li>".format(
+                html.escape(str(item.get("source", "")), quote=True),
+                html.escape(str(item.get("subject", ""))),
+                html.escape(str(item.get("parameter", ""))),
+                html.escape(str(item.get("maximum", ""))),
+                html.escape(str(item.get("unit", ""))),
+            )
+            for item in safety.get("limits", [])
+            if isinstance(item, dict)
+        )
+        pin_html = "".join(
+            "<li title=\"{}\"><b>{}</b> · {} · {}</li>".format(
+                html.escape(str(item.get("source", "")), quote=True),
+                html.escape(str(item.get("signal", ""))),
+                html.escape(str(item.get("pin", ""))),
+                html.escape(str(item.get("direction", ""))),
+            )
+            for item in safety.get("pin_assignments", [])
+            if isinstance(item, dict)
+        )
+        stop_html = "".join(
+            f"<li>{html.escape(str(item))}</li>"
+            for item in safety.get("stop_conditions", [])
+            if isinstance(item, str)
+        )
         review = html.escape(row.review_sha256)
+        boundaries_html = "".join(
+            "<section><h3>{}</h3><p class=\"digest\">{}</p><pre>{}</pre></section>".format(
+                html.escape(str(item.get("contract", ""))),
+                html.escape(str(item.get("contract_sha256", ""))),
+                html.escape(json.dumps(item.get("hardware_safety", {}), ensure_ascii=False, indent=2)),
+            ) for item in proposal.get("boundaries", []) if isinstance(item, dict)
+        )
+        safety_html = boundaries_html or (
+            f"<h3>Voltage/current limits</h3><ul>{limit_html or '<li>missing</li>'}</ul>"
+            f"<h3>Allowed pins</h3><ul>{pin_html or '<li>missing</li>'}</ul>"
+            f"<h3>Immediate stop conditions</h3><ul>{stop_html or '<li>missing</li>'}</ul>"
+        )
         initial_state = json.dumps(row.state)
         body = f"""
         <h1>RTASE mobile control</h1>
@@ -800,6 +853,8 @@ def _remote_html(
           <dt>Campaign hours</dt><dd>{row.duration_hours}</dd>
           <dt>Review digest</dt><dd class="digest">{review}</dd>
         </dl>
+        <h2>Electrical safety envelope</h2>
+        {safety_html}
         <h2>Hardware permissions</h2><ul>{permission_html}</ul>
         <label>이름 <input id="actor" autocomplete="name" maxlength="100"></label>
         <label>실행 지시 또는 수정 의견
@@ -898,6 +953,7 @@ def _remote_html(
     h1{{font-size:25px}} h2{{font-size:17px;margin-top:28px}} .warning{{color:#f2cc60}}
     dl{{display:grid;grid-template-columns:140px 1fr;gap:9px}}dt{{color:#8b949e}}dd{{margin:0}}
     .digest{{font:12px monospace;overflow-wrap:anywhere}}li{{margin:8px 0}}small{{color:#8b949e}}
+    pre{{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}}
     label{{display:grid;gap:7px;margin-top:20px}}input,textarea{{background:#161b22;border:1px solid #30363d;border-radius:6px;color:white;padding:11px}}
     textarea{{font:15px system-ui;min-height:96px;resize:vertical}}
     button{{background:#238636;border:0;border-radius:6px;color:white;font-weight:700;margin-top:12px;padding:11px 16px}}

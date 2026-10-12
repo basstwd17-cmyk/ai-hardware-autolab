@@ -49,6 +49,14 @@ def session(env):
     return W.WireSession(ledger, control, sent.append), ledger, sent
 
 
+@pytest.fixture()
+def conversation_session(tmp_path):
+    from QKD_PROJ.tests.test_unified_conversation import make_control
+    ledger, _, _, control = make_control(tmp_path)
+    sent = []
+    return W.WireSession(ledger, control, sent.append), ledger, sent
+
+
 def kinds(frames):
     return [f["type"] for f in frames]
 
@@ -301,8 +309,8 @@ def test_steer_and_cancel_travel_with_their_command_id(session):
     assert sent[-1]["commandId"] == "c9" and sent[-1]["job"]["outcome"] == "cancelled"
 
 
-def test_start_creates_a_durable_job_and_returns_its_id(session):
-    wire, ledger, sent = session
+def test_mission_creates_a_durable_job_and_returns_its_id(conversation_session):
+    wire, ledger, sent = conversation_session
     scenario = "Gate12 PRU DAC1 digital path를 보드 없이 빌드만 해줘"
     wire.handle(
         {
@@ -312,15 +320,13 @@ def test_start_creates_a_durable_job_and_returns_its_id(session):
         }
     )
     preview = sent[-1]["preflight"]
-    selected = preview["selected_contract"]
     wire.handle(
         {
-            "type": "job.start",
+            "type": "job.mission",
             "commandId": "start-1",
-            "gate": selected["name"],
+            "searchPolicy": "refresh",
             "objective": "Verify the digital path",
             "scenario": scenario,
-            "contractSha256": selected["sha256"],
             "scenarioSha256": preview["scenario_sha256"],
         }
     )
@@ -330,11 +336,12 @@ def test_start_creates_a_durable_job_and_returns_its_id(session):
     assert answer["commandId"] == "start-1" and answer["ok"] is True
     job_id = answer["job"]["job_id"]
     assert ledger.job(job_id).objective == "Verify the digital path"
-    assert ledger.handoffs(job_id, "Brief", 0)[0].payload["scenario"].startswith("Gate12")
+    assert ledger.handoffs(job_id, "Brief", 0)[0].payload["inputs"]["scenario"].startswith("Gate12")
+    assert not ledger.handoffs(job_id, "Plan")
 
 
-def test_contract_gap_can_start_discovery_over_the_office_protocol(session):
-    wire, ledger, sent = session
+def test_new_board_needs_no_contract_to_start_over_the_office_protocol(conversation_session):
+    wire, ledger, sent = conversation_session
     scenario = "Without hardware, build and verify an STM32G474 HRTIM firmware simulation."
     wire.handle(
         {
@@ -344,12 +351,13 @@ def test_contract_gap_can_start_discovery_over_the_office_protocol(session):
         }
     )
     preview = sent[-1]["preflight"]
-    assert preview["status"] == "contract_gap"
+    assert preview["status"] == "ready"
 
     wire.handle(
         {
-            "type": "job.discover",
+            "type": "job.mission",
             "commandId": "discover-1",
+            "searchPolicy": "refresh",
             "objective": "design the new protocol",
             "scenario": scenario,
             "scenarioSha256": preview["scenario_sha256"],
@@ -359,35 +367,27 @@ def test_contract_gap_can_start_discovery_over_the_office_protocol(session):
     answer = sent[-1]
     assert answer["ok"] is True and answer["commandId"] == "discover-1"
     brief = ledger.handoffs(answer["job"]["job_id"], "Brief", 0)[0].payload
-    assert brief["resources"]["workflow"] == "discovery"
+    assert brief["workflow"] == "conversation-prototype-v1"
+    assert not ledger.approvals(answer["job"]["job_id"])
 
 
-def test_ready_scenario_can_start_a_refresh_mission_over_the_office_protocol(session):
-    wire, ledger, sent = session
-    scenario = "Gate12 PRU DAC1 Verilog을 보드 없이 개선하고 빌드해줘"
-    wire.handle({
-        "type": "scenario.preflight",
-        "commandId": "preview-mission",
-        "scenario": scenario,
-    })
+def test_ready_scenario_can_start_a_refresh_mission_over_the_office_protocol(tmp_path):
+    from QKD_PROJ.tests.test_unified_conversation import make_control
+    ledger, flow, _, control = make_control(tmp_path)
+    sent = []
+    wire = W.WireSession(ledger, control, sent.append)
+    scenario = "Without hardware, improve and build existing Verilog"
+    wire.handle({"type": "scenario.preflight", "commandId": "preview-mission", "scenario": scenario})
     preview = sent[-1]["preflight"]
     assert preview["status"] == "ready"
-
-    wire.handle({
-        "type": "job.mission",
-        "commandId": "mission-1",
-        "objective": "improve the existing implementation",
-        "scenario": scenario,
-        "scenarioSha256": preview["scenario_sha256"],
-        "searchPolicy": "refresh",
-    })
-
+    wire.handle({"type": "job.mission", "commandId": "mission-1", "objective": scenario,
+                 "scenario": scenario, "scenarioSha256": preview["scenario_sha256"], "searchPolicy": "refresh"})
     answer = sent[-1]
     assert answer["ok"] is True and answer["commandId"] == "mission-1"
+    assert answer["workflow"] == "conversation"
     brief = ledger.handoffs(answer["job"]["job_id"], "Brief", 0)[0].payload
-    assert brief["resources"]["workflow"] == "mission"
-    assert brief["resources"]["selected_contract"]["name"] == preview["selected_contract"]["name"]
-    assert brief["resources"]["search_policy"] == "refresh"
+    assert flow.owns(answer["job"]["job_id"])
+    assert brief["inputs"]["search_policy"] == "refresh"
 
 
 def test_job_start_without_preflight_digests_is_refused(session):
@@ -407,8 +407,8 @@ def test_job_start_without_preflight_digests_is_refused(session):
     assert ledger.jobs() == []
 
 
-def test_preflight_is_read_only_and_returns_a_reviewed_contract(session):
-    wire, ledger, sent = session
+def test_preflight_is_read_only_and_returns_the_current_roles(conversation_session):
+    wire, ledger, sent = conversation_session
     before = ledger.latest_event_id()
     wire.handle(
         {
@@ -421,13 +421,14 @@ def test_preflight_is_read_only_and_returns_a_reviewed_contract(session):
     answer = sent[-1]
     assert answer["commandId"] == "preview-1" and answer["ok"] is True
     assert answer["preflight"]["status"] == "ready"
-    assert answer["preflight"]["selected_contract"]["name"] == "gate12-pru-dac1-plan.yaml"
+    assert answer["preflight"]["roles"] == ["lead-agent", "builder", "verifier"]
+    assert "selected_contract" not in answer["preflight"]
     assert answer["preflight"]["approval_required"] is False
     assert ledger.latest_event_id() == before
 
 
-def test_a_preflighted_start_rechecks_both_digests(session):
-    wire, ledger, sent = session
+def test_a_preflighted_mission_rechecks_the_scenario_digest(conversation_session):
+    wire, ledger, sent = conversation_session
     scenario = "Gate12 PRU DAC1 Verilog을 보드 없이 빌드만 해줘"
     wire.handle(
         {
@@ -437,22 +438,19 @@ def test_a_preflighted_start_rechecks_both_digests(session):
         }
     )
     preview = sent[-1]["preflight"]
-    selected = preview["selected_contract"]
-
-    wire.handle(
-        {
-            "type": "job.start",
+    frame = {
+            "type": "job.mission",
             "commandId": "start-2",
-            "gate": selected["name"],
-            "objective": preview["objective"],
+            "searchPolicy": "refresh",
+            "objective": "Build Verilog without a board",
             "scenario": scenario,
-            "contractSha256": selected["sha256"],
             "scenarioSha256": preview["scenario_sha256"],
         }
-    )
-
+    wire.handle({**frame, "scenarioSha256": "0" * 64})
+    assert sent[-1]["ok"] is False and ledger.jobs() == []
+    wire.handle(frame)
     assert sent[-1]["ok"] is True
-    assert ledger.job(sent[-1]["job"]["job_id"]).gate == selected["name"]
+    assert ledger.handoffs(sent[-1]["job"]["job_id"], "Brief", 0)[0].payload["inputs"]["scenario_sha256"] == preview["scenario_sha256"]
 
 
 def test_a_command_without_an_id_is_refused(session):

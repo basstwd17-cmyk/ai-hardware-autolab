@@ -155,7 +155,7 @@ function renderJobs(jobs) {
     button.className = `job ${row.job_id === selectedJob ? 'selected' : ''}`
     const title = document.createElement('b'); title.textContent = row.objective || row.job_id
     const id = document.createElement('small'); id.textContent = row.job_id
-    const state = document.createElement('span'); state.className = 'state'; state.textContent = row.outcome || row.state || row.reason || 'unknown'
+    const state = document.createElement('span'); state.className = 'state'; state.textContent = statusLabel(row.scheduler_status || row.outcome || row.state || row.reason || 'unknown')
     button.append(title, id, state)
     button.addEventListener('click', () => { selectedJob = row.job_id; renderJobs(jobs) })
     root.append(button)
@@ -174,7 +174,7 @@ function renderSelectedSummary() {
 
   const top = document.createElement('div')
   top.className = 'summary-top'
-  top.append(chip(job.scheduler_status || job.state || 'unknown', statusTone(job)))
+  top.append(chip(statusLabel(job.scheduler_status || job.state || 'unknown'), statusTone(job)))
   if (job.phase) top.append(chip(job.phase, 'phase'))
   if (Number.isInteger(job.iteration)) top.append(chip(`iteration ${job.iteration}`, 'plain'))
   root.append(top)
@@ -271,6 +271,15 @@ function statusTone(job) {
   if (job.scheduler_status === 'waiting_person' || job.scheduler_status === 'waiting_approval') return 'warn'
   if (job.state === 'done' && job.outcome !== 'satisfied') return 'bad'
   return 'plain'
+}
+
+function statusLabel(value) {
+  return ({
+    active: '실행 중', runnable: '실행 가능', waiting_approval: '승인 대기',
+    waiting_retry: '재시도 대기', waiting_person: '확인 필요', finished: '완료',
+    running: '진행', pending: '대기', blocked: '확인 필요', done: '완료',
+    cancelled: '취소됨', satisfied: '충족', contract_gap: '계약 보완 필요',
+  })[value] || value
 }
 
 function formatTime(value) {

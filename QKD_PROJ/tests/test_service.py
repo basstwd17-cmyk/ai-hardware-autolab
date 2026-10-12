@@ -508,6 +508,72 @@ def test_a_tick_moves_one_step_and_the_service_counts_it(env):
         assert ledger.job(job.job_id).state == J.RUNNING
 
 
+def test_read_only_control_does_not_wait_for_a_running_turn() -> None:
+    """The office can read progress while an agent call owns the turn lock."""
+    class Control:
+        def handle(self, request):
+            return {"ok": True, "command": request["command"]}
+
+    turn = threading.RLock()
+    proxy = S._LockedControl(Control(), turn)
+    entered = threading.Event()
+    release = threading.Event()
+    done = threading.Event()
+
+    def hold_turn() -> None:
+        with turn:
+            entered.set()
+            release.wait(timeout=1)
+
+    def read_events() -> None:
+        assert proxy.handle({"command": "events"}) == {"ok": True, "command": "events"}
+        done.set()
+
+    owner = threading.Thread(target=hold_turn)
+    reader = threading.Thread(target=read_events)
+    owner.start()
+    assert entered.wait(timeout=1)
+    reader.start()
+    assert done.wait(timeout=0.2)
+    release.set()
+    owner.join(timeout=1)
+    reader.join(timeout=1)
+
+
+def test_cancel_interrupts_without_waiting_for_the_running_turn() -> None:
+    class Control:
+        def cancel(self, job_id, cancelled_by, reason=""):
+            return {"job": {"job_id": job_id, "outcome": "cancelled"}, "withdrawn": []}
+
+    turn = threading.RLock()
+    interrupted: list[str] = []
+    proxy = S._LockedControl(Control(), turn, lambda job_id: interrupted.append(job_id) or True)
+    entered = threading.Event()
+    release = threading.Event()
+    cancelled = threading.Event()
+
+    def hold_turn() -> None:
+        with turn:
+            entered.set()
+            release.wait(timeout=2)
+
+    def cancel() -> None:
+        answer = proxy.cancel("job_live", "quantum1", "stop now")
+        assert answer["job"]["outcome"] == "cancelled"
+        cancelled.set()
+
+    owner = threading.Thread(target=hold_turn)
+    owner.start()
+    assert entered.wait(timeout=1)
+    caller = threading.Thread(target=cancel)
+    caller.start()
+    assert cancelled.wait(timeout=0.2)
+    assert interrupted == ["job_live"]
+    release.set()
+    owner.join(timeout=2)
+    caller.join(timeout=2)
+
+
 def test_run_forever_stops_when_asked(env):
     service, ledger = _service(env)
     start(ledger, "g.yaml", "build it")

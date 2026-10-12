@@ -1,4 +1,5 @@
 import { categoryForNode, type AtlasCategory } from './atlas'
+import { buildTopicGraph } from './topics'
 import {
   compactBrainGraph,
   objectLabel,
@@ -8,9 +9,10 @@ import {
   type BrainNode,
 } from './model'
 
-export type ExplorerMode = 'concepts' | 'evidence'
+export type ExplorerMode = 'topics' | 'concepts' | 'evidence'
 
 export interface ExplorerNode extends BrainNode {
+  navigation?: boolean
   category: AtlasCategory
   claimIds: string[]
   degree: number
@@ -38,6 +40,7 @@ const STATUS_PRIORITY = ['refuted', 'verified', 'proposed', 'superseded']
  * changing any underlying fact.
  */
 export function buildExplorerGraph(source: BrainGraph, mode: ExplorerMode): ExplorerGraph {
+  if (mode === 'topics') return buildTopicGraph(source)
   const base = mode === 'concepts' ? compactBrainGraph(source) : source
   const claims = new Map(source.claims.map((claim) => [claim.claimId, claim]))
   const claimsByNode = new Map<string, Set<string>>()

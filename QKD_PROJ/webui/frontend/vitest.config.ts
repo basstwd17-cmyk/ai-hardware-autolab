@@ -8,8 +8,9 @@ import { defineConfig } from 'vitest/config'
  * right whether or not a daemon is up.
  */
 export default defineConfig({
+  esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 })

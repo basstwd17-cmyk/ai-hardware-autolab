@@ -1,15 +1,39 @@
 # The standalone web UI
 
+Windows 실행 명령과 Cloudflare 휴대폰 릴레이 절차: [RUNNING.md](RUNNING.md).
+
 A second client of the daemon's protocol 1, in a browser, with no VS Code and
 no extension host. The plan and the reasoning are in
 `../docs/2026-08-27-webui-standalone-plan.md`.
 
 ## Run it
 
+### Knowledge map
+
+Durable brain defaults to **기술 맵**: short topic nodes under Board, Component,
+Circuit, Software, Measurement, Datasheet and Docs. A shared record mentioning
+BBB and PRU/DMA groups those features under BBB; STM32/HRTIM works likewise.
+These are navigation associations, not verified electrical connections. Select
+a node for original claims and evidence; **원본 관계** and **근거** retain the
+more detailed provenance views. Empty categories are navigation scaffolding,
+not invented knowledge about a board.
+
+Polling starts after the last knowledge cursor. Received pages survive tab
+switches and temporary failures within the same API session; a page reload or
+new session fetches again. Connection/authentication errors remain visible even
+with the note panel closed. A cached map does not mean the daemon is connected.
+Start the backend and daemon and use the current session URL to receive updates.
+
+`frontend/tests/brain-preview.html` is a Vite-only visual fixture with explicitly
+labelled sample records, tab-switch and disconnected-provider controls. It does
+not access real knowledge, jobs, or equipment and is not a production entrypoint.
+
+### Processes
+
 Two processes. The daemon is unchanged and is started the way it always was:
 
 ```powershell
-py -3 -m QKD_PROJ.orchestrator                    # offline profile, default pipe
+py -3 -m QKD_PROJ.orchestrator                    # hardware profile, default pipe
 py -3 -m QKD_PROJ.webui.backend.app               # prints the URL, token included
 ```
 
@@ -39,6 +63,36 @@ py -3 -m QKD_PROJ.webui.backend.app --dev-origin http://127.0.0.1:5173
 ```
 
 ## What it serves
+
+### Office animation and compact activity (2026-09-04)
+
+The renderer adapts the pinned Pixel Agents tile-centre seat anchor, facing,
+six-pixel sitting offset and chair depth. `frontend/src/office/navigation.ts`
+uses the layout's floor tiles and pinned furniture footprints for cardinal
+pathfinding. Waiting agents pick shuffled, reserved lounge/meeting seats,
+pause for variable intervals, and walk back when work resumes. This ephemeral
+animation never changes the office snapshot, job state or approvals.
+
+The compact activity panel merges paginated ledger history with the websocket
+tail, so a tab remount or a token-only tail cannot erase its notes. Actual
+agent messages and deterministic activity summaries are labelled separately;
+command failure and clipped records are not reported as success. Concurrent
+cursor updates coalesce behind an in-flight transcript fetch.
+
+Offline browser regression (uses the workspace Playwright install and Edge):
+
+```powershell
+cd C:\KIST\QKD_PROJ\webui\frontend
+node scripts/office-ui-smoke.mjs C:\KIST\tmp\office-ui-smoke
+```
+
+The fixture uses no daemon/API/hardware and starts only a temporary Vite server
+on 127.0.0.1:18789. It checks history-only notes, tab remount and fast-cursor
+history recovery, and captures work/lounge/return poses. The server and browser
+are closed afterward. `npm.cmd test` tests navigation and conversation replay.
+After a frontend build, refresh the local browser; no daemon restart is needed.
+
+### Endpoints
 
 Read the methods off the app, not off this table — `app.openapi()["paths"]` is
 the authority, and a test asserts these agree with it.

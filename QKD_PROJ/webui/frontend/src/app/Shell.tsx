@@ -28,12 +28,11 @@ import { useDock } from './useDock'
 import type { Platform } from './usePlatform'
 import { AgentsView } from './views/AgentsView'
 import { StartView } from './views/StartView'
-import { CampaignView } from './views/CampaignView'
 import { InboxView } from './views/InboxView'
 import { OfficeStage } from './views/OfficeStage'
 import { SettingsView } from './views/SettingsView'
 
-const TABS = ['Agents', 'Start', 'Campaign', 'Map', 'Inbox', 'Settings'] as const
+const TABS = ['Agents', 'Start', 'Map', 'Inbox', 'Settings'] as const
 type Tab = (typeof TABS)[number]
 
 export function Shell({
@@ -47,7 +46,7 @@ export function Shell({
 }) {
   const [tab, setTab] = useState<Tab>('Agents')
   const [full, setFull] = useState(false)
-  const [mapMode, setMapMode] = useState<'run' | 'brain'>('run')
+  const [mapMode, setMapMode] = useState<'run' | 'brain'>('brain')
   const { dock, setSide, toggle, startResize } = useDock()
 
   const inbox = platform.state?.inbox.length ?? 0
@@ -114,14 +113,24 @@ export function Shell({
 
               <div className={`dock-body dock-${tab.toLowerCase()}`}>
                 {platform.error && <div className="error">{platform.error}</div>}
-                {tab === 'Agents' && <AgentsView platform={platform} />}
-                {tab === 'Start' && <StartView platform={platform} />}
-                {tab === 'Campaign' && <CampaignView platform={platform} />}
+                {/*
+                  Agents and Start are work surfaces, not disposable views.
+                  Keep them mounted while another tab is open so the selected
+                  job, loaded transcript, scroll position and an unfinished
+                  scenario do not vanish merely because the operator checked
+                  the map or inbox.
+                */}
+                <div className="persistent-pane" hidden={tab !== 'Agents'}>
+                  <AgentsView platform={platform} />
+                </div>
+                <div className="persistent-pane" hidden={tab !== 'Start'}>
+                  <StartView platform={platform} />
+                </div>
                 {tab === 'Map' && (
                   <div className="map-stack">
                     <div className="map-switch">
-                      <button className={`chip ${mapMode === 'run' ? 'on' : ''}`} onClick={() => setMapMode('run')}>Run provenance</button>
-                      <button className={`chip ${mapMode === 'brain' ? 'on' : ''}`} onClick={() => setMapMode('brain')}>Durable brain</button>
+                      <button className={`chip ${mapMode === 'brain' ? 'on' : ''}`} onClick={() => setMapMode('brain')}>지식 마인드맵</button>
+                      <button className={`chip ${mapMode === 'run' ? 'on' : ''}`} onClick={() => setMapMode('run')}>실행 이력 · 상세</button>
                     </div>
                     {mapMode === 'run' ? <GraphView snapshot={platform.graph} api={api} /> : <BrainView api={platform.api} />}
                   </div>

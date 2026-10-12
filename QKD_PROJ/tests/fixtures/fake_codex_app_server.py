@@ -26,6 +26,16 @@ for line in sys.stdin:
         send({"id": request_id, "result": {"userAgent": "fake"}})
     elif method == "initialized":
         continue
+    elif method == "model/list":
+        cursor = message.get("params", {}).get("cursor")
+        model = "test-large" if cursor else "test-small"
+        send({"id": request_id, "result": {"data": [{
+            "id": model, "model": model, "displayName": model,
+            "defaultReasoningEffort": "low", "supportedReasoningEfforts": [
+                {"reasoningEffort": "low", "description": "Short"},
+                {"reasoningEffort": "high", "description": "Deep"},
+            ], "isDefault": not bool(cursor), "hidden": False,
+        }], "nextCursor": None if cursor else "page2"}})
     elif method == "thread/start":
         if message.get("params", {}).get("dynamicTools") and not experimental_api:
             send(

@@ -41,6 +41,10 @@ class ToolError(RuntimeError):
     """
 
 
+class DevicePreparationError(ToolError):
+    """Host validation failed before hardware dispatch; Builder may correct input."""
+
+
 @dataclass(frozen=True)
 class Tool:
     name: str

@@ -22,12 +22,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AgentProfile, HandoffDetail, JobEntry } from '../../api/client'
 import { waitingOf } from '../../api/client'
-import { proposalOf } from '../contract'
-import { agentsOf, toFeedSteps, toTurns, type Entry, type FeedStep, type Turn } from '../conversation'
-import { ContractPanel } from './ContractPanel'
+import { agentsOf, mergeConversationRows, toFeedSteps, toLiveNotes, toTurns, type Entry, type FeedStep, type Turn } from '../conversation'
 import { useTranscript } from '../useTranscript'
 import { handoffFacts, handoffSummary, handoffTitle, itemText } from '../handoff'
 import type { Platform } from '../usePlatform'
+import { TEAM_ORDER, teamDisplayName } from '../agentTeams'
+import { tokenUsageByAgent, type AgentTokenUsage } from '../tokenUsage'
+import { clarificationQuestion } from '../clarification'
 
 export function AgentsView({ platform }: { platform: Platform }) {
   const jobs = platform.state?.jobs ?? []
@@ -38,18 +39,26 @@ export function AgentsView({ platform }: { platform: Platform }) {
 
   // Follow the first job until the user picks one, so the panel is never a
   // blank waiting for a click when there is exactly one thing to look at.
-  const selected = chosen ?? jobs[0]?.job_id ?? null
+  const selected = chosen ?? jobs.find((job) => !isFinished(job))?.job_id ?? jobs[0]?.job_id ?? null
   const cursor = platform.connection.daemon?.cursor ?? 0
   const transcript = useTranscript(platform.api, selected, cursor)
 
-  const turns = useMemo(() => toTurns(transcript.events), [transcript.events])
+  const liveRows = useMemo(
+    () => platform.liveEvents.filter((event) => event.job_id === selected),
+    [platform.liveEvents, selected],
+  )
+  const rows = useMemo(() => mergeConversationRows(transcript.events, liveRows, selected), [transcript.events, liveRows, selected])
+  const turns = useMemo(() => toTurns(rows), [rows])
   const feed = useMemo(() => toFeedSteps(turns), [turns])
   const agents = useMemo(() => agentsOf(turns), [turns])
+  const liveNotes = useMemo(() => toLiveNotes(rows), [rows])
+  const tokenUsage = useMemo(() => tokenUsageByAgent(rows), [rows])
   const profiles = useMemo(
     () => new Map(catalog.map((profile) => [profile.name, profile])),
     [catalog],
   )
   const result = selected ? platform.state?.results[selected] : undefined
+  const selectedJob = jobs.find((job) => job.job_id === selected)
 
   useEffect(() => {
     let alive = true
@@ -77,6 +86,8 @@ export function AgentsView({ platform }: { platform: Platform }) {
             showAll={showAllProfiles}
             onToggleAll={() => setShowAllProfiles((value) => !value)}
           />
+          <LiveActivity notes={liveNotes} catalog={catalog} loadingHistory={transcript.loading} finished={!!selectedJob && isFinished(selectedJob)} />
+          <TokenUsagePanel usage={tokenUsage} />
           <Progress
             agents={agents}
             turns={turns}
@@ -85,6 +96,16 @@ export function AgentsView({ platform }: { platform: Platform }) {
             jobId={selected}
             platform={platform}
           />
+          <FeedbackComposer
+            key={selected}
+            jobId={selected}
+            platform={platform}
+            disabled={selectedJob ? isFinished(selectedJob) : false}
+            question={clarificationQuestion(selectedJob ? waitingOf(selectedJob) : null)}
+          />
+          {selectedJob?.state === 'blocked' && <ResumeStep key={selected} jobId={selected} platform={platform}
+            reason={waitingOf(selectedJob)?.detail ?? String([...rows].reverse().find((row) => row.kind === 'job.blocked')?.payload?.reason ?? '')}
+            retryUsed={rows.some((row) => row.kind === 'plan.retry.requested' && row.payload?.iteration === transcript.job?.iteration)} />}
           <HandoffResults api={platform.api} jobId={selected} cursor={transcript.total} />
           <div className="thread">
             {feed.map((step, index) => (
@@ -100,6 +121,160 @@ export function AgentsView({ platform }: { platform: Platform }) {
         </>
       )}
     </div>
+  )
+}
+
+function TokenUsagePanel({ usage }: { usage: AgentTokenUsage[] }) {
+  if (usage.length === 0) return null
+  const total = usage.reduce((sum, row) => sum + row.total, 0)
+  const maximum = Math.max(...usage.map((row) => row.total), 1)
+  return (
+    <section className="token-usage" aria-label="에이전트별 토큰 사용량">
+      <header>
+        <span><b>토큰 사용량</b> · 총 {tokenCount(total)}</span>
+        <small>런타임 보고값 · thread별 최신 누적값</small>
+      </header>
+      <div className="token-usage-list">
+        {usage.map((row) => (
+          <details key={row.agent} className="token-agent">
+            <summary>
+              <span className="token-agent-name">{row.agent}</span>
+              <span className="token-bar"><i style={{ width: `${Math.max(2, row.total / maximum * 100)}%` }} /></span>
+              <b>{tokenCount(row.total)}</b>
+              <small>{row.threads}회</small>
+            </summary>
+            <div className="token-breakdown">
+              <span>입력 <b>{tokenCount(row.input)}</b></span>
+              <span>캐시 입력 <b>{tokenCount(row.cachedInput)}</b></span>
+              <span>출력 <b>{tokenCount(row.output)}</b></span>
+              <span>추론 출력 <b>{tokenCount(row.reasoningOutput)}</b></span>
+            </div>
+          </details>
+        ))}
+      </div>
+      <p>같은 thread의 중간 갱신은 중복 합산하지 않습니다. 토큰 이벤트를 보내지 않는 런타임 사용량은 포함되지 않습니다.</p>
+    </section>
+  )
+}
+
+function tokenCount(value: number): string {
+  return new Intl.NumberFormat('ko-KR').format(value)
+}
+
+export function FeedbackComposer({
+  jobId,
+  platform,
+  disabled,
+  question = null,
+}: {
+  jobId: string
+  platform: Platform
+  disabled: boolean
+  question?: string | null
+}) {
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [failed, setFailed] = useState(false)
+
+  const send = async () => {
+    const message = draft.trim()
+    if (!message || !platform.api || disabled || busy) return
+    setBusy(true)
+    setNotice('')
+    setFailed(false)
+    try {
+      const answer = await platform.api.command({
+        type: 'job.steer',
+        commandId: crypto.randomUUID(),
+        jobId,
+        message,
+        sentBy: 'local-operator',
+      })
+      if (answer.ok !== true) throw new Error(String(answer.error ?? '피드백이 거부되었습니다.'))
+      setDraft('')
+      setNotice(answer.willBeDelivered === true
+        ? question ? '답변을 기록했습니다. Lead가 기존 작업과 답변을 검토해 재계획합니다.' : '원장에 기록했고, 다음 에이전트가 이 피드백을 받습니다.'
+        : '원장에는 기록했지만 현재 단계에는 전달할 다음 에이전트가 없습니다.')
+      platform.refresh()
+    } catch (cause) {
+      setFailed(true)
+      setNotice(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="job-feedback" aria-label={question ? '에이전트 질문에 답변하기' : '에이전트에게 피드백 보내기'}>
+      <header>
+        <b>{question ? '답변 대기' : '진행 방향 피드백'}</b>
+        <small>{question ? '답변을 보내면 같은 작업에서 Lead가 이어갑니다. 장비 실행 전에는 연결·권한·안전 설정을 다시 확인합니다.' : '다음 에이전트가 실행되기 전에 원장에 전달됩니다.'}</small>
+      </header>
+      {question && <p className="warn" role="status">{question}</p>}
+      <textarea
+        value={draft}
+        disabled={disabled || busy}
+        maxLength={4000}
+        placeholder={disabled
+          ? '완료된 job에는 피드백을 보낼 수 없습니다.'
+          : question ? '확인한 내용을 답변해주세요. 예: LAN 연결을 복구했고 프로브 스위치는 10×입니다.'
+            : '예: CH3에 연결했어. 기존 코드를 활용하고 파형 저장부터 확인해줘.'}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault()
+            void send()
+          }
+        }}
+      />
+      <div className="job-feedback-actions">
+        <span className={`small ${failed ? 'warn' : 'muted'}`} role="status">{notice || 'Ctrl+Enter로도 보낼 수 있습니다.'}</span>
+        <button className="chip" disabled={disabled || busy || !draft.trim()} onClick={() => void send()}>
+          {busy ? '기록 중…' : question ? '답변 보내기' : '피드백 보내기'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function LiveActivity({
+  notes,
+  catalog,
+  loadingHistory,
+  finished,
+}: {
+  notes: ReturnType<typeof toLiveNotes>
+  catalog: AgentProfile[]
+  loadingHistory: boolean
+  finished: boolean
+}) {
+  const teams = new Map(catalog.map((profile) => [profile.name, profile.team]))
+  if (notes.length === 0) {
+    return (
+      <section className="live-activity">
+        <header><b>지금 진행 중</b><span className="muted">{loadingHistory ? '이전 기록을 불러오는 중' : '새 활동 대기'}</span></header>
+        <p className="muted small">실행이 시작되면 에이전트가 한 행동씩 여기에 짧게 알려줍니다.</p>
+      </section>
+    )
+  }
+  return (
+    <section className="live-activity" aria-label="실시간 에이전트 진행">
+      <header><b>최근 활동 · 대화</b><span className="muted">{finished ? '종료된 작업의 기록' : loadingHistory ? '기록 동기화 중' : '새 활동이 오면 이어집니다'}</span></header>
+      <p className="muted small">실제 메시지와 실행 기록 요약입니다. 원문은 아래 상세 기록에서 확인할 수 있습니다.</p>
+      <div className="live-notes">
+        {notes.map((note) => {
+          const team = teams.get(note.agent) ?? note.agent
+          return (
+            <article key={note.eventId} className={note.current && !finished ? 'current' : ''}>
+              <span className="feed-avatar">{roleIcon(catalog.find((profile) => profile.name === note.agent)?.role ?? note.agent)}</span>
+              <p><b>{teamDisplayName(team)} <small>{note.source === 'message' ? '메시지' : '활동 요약'}</small></b>{note.text}</p>
+              <time>{shortTime(note.at)}</time>
+            </article>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -222,16 +397,21 @@ function AgentStrip({
   showAll: boolean
   onToggleAll: () => void
 }) {
-  const activeSet = new Set(active)
-  const shown = showAll ? catalog : catalog.filter((profile) => activeSet.has(profile.name))
-  const chosen = catalog.find((profile) => profile.name === selected) ?? null
+  const teams = groupAgentTeams(catalog)
+  const stageTeams = new Map(catalog.map((profile) => [profile.name, profile.team]))
+  const activeSet = new Set(active.map((name) => stageTeams.get(name)).filter(Boolean))
+  const shown = showAll ? teams : teams.filter((profile) => activeSet.has(profile.name))
+  const chosen = teams.find((profile) => profile.name === selected) ?? null
+  const chosenMembers = chosen
+    ? catalog.filter((profile) => profile.team === chosen.name).map((profile) => profile.name)
+    : []
   const actions = latestActions(turns)
 
   return (
     <section className="agent-strip">
       <header>
-        <span><b>에이전트</b> · {active.length} active</span>
-        <button className="link" onClick={onToggleAll}>{showAll ? '현재 팀만' : `전체 ${catalog.length}`}</button>
+        <span><b>에이전트 팀</b> · {activeSet.size} active</span>
+        <button className="link" onClick={onToggleAll}>{showAll ? '현재 팀만' : `전체 ${teams.length}`}</button>
       </header>
       <div className="agent-cards">
         {shown.map((profile) => (
@@ -242,24 +422,32 @@ function AgentStrip({
           >
             <span className={`agent-avatar role-${profile.role}`}>{roleIcon(profile.role)}</span>
             <span className="agent-card-copy">
-              <b>{profile.name}</b>
-              <small>{roleLabel(profile.role)} · {actions.get(profile.name) ?? (activeSet.has(profile.name) ? '대기 중' : '현재 작업 없음')}</small>
+              <b>{teamDisplayName(profile.name)}</b>
+              <small>{roleLabel(profile.role)} · {teamAction(profile.name, catalog, actions) ?? (activeSet.has(profile.name) ? '대기 중' : '현재 작업 없음')}</small>
             </span>
             <span className="agent-badges">{permissionBadges(profile).map((badge) => <i key={badge}>{badge}</i>)}</span>
           </button>
         ))}
         {shown.length === 0 && <span className="muted small">아직 이 작업에 참여한 에이전트가 없습니다.</span>}
       </div>
-      {chosen && <AgentProfileDetail profile={chosen} onClose={() => onSelect(null)} />}
+      {chosen && <AgentProfileDetail profile={chosen} members={chosenMembers} onClose={() => onSelect(null)} />}
     </section>
   )
 }
 
-function AgentProfileDetail({ profile, onClose }: { profile: AgentProfile; onClose: () => void }) {
+function AgentProfileDetail({
+  profile,
+  members,
+  onClose,
+}: {
+  profile: AgentProfile
+  members: string[]
+  onClose: () => void
+}) {
   return (
     <div className="agent-profile-detail">
       <button className="link close" onClick={onClose}>닫기</button>
-      <b>{roleIcon(profile.role)} {profile.name}</b>
+      <b>{roleIcon(profile.role)} {teamDisplayName(profile.name)}</b>
       <p>{profile.description}</p>
       <div className="profile-facts">
         <span><small>역할</small>{roleLabel(profile.role)}</span>
@@ -273,12 +461,52 @@ function AgentProfileDetail({ profile, onClose }: { profile: AgentProfile; onClo
           <Row label="MCP" value={profile.mcpTools.join(', ') || '—'} />
           <Row label="local" value={profile.localTools.join(', ') || '—'} />
           <Row label="skills" value={profile.skills.join(', ') || '—'} />
+          <Row label="내부 단계" value={members.join(' → ') || '—'} />
           <Row label="receives" value={profile.consumes.join(', ') || '—'} />
           <Row label="hands off" value={profile.emits.join(', ') || '—'} />
         </dl>
       </details>
     </div>
   )
+}
+
+const TEAM_DESCRIPTIONS: Record<string, string> = {
+  lead: '시나리오를 소유하고 기존 지식과 필요한 검색을 합쳐 구현 구조와 실행 계획을 만듭니다.',
+  builder: '코드 작성·빌드·프로그램·측정을 한 흐름으로 실행하고 run 증거를 남깁니다.',
+  verifier: 'run 증거를 최초 요구 조건과 비교해 완료 또는 재계획을 결정합니다.',
+}
+
+function groupAgentTeams(catalog: AgentProfile[]): AgentProfile[] {
+  return TEAM_ORDER.flatMap((team) => {
+    const members = catalog.filter((profile) => profile.team === team)
+    if (members.length === 0) return []
+    const first = members[0]
+    const unique = (values: string[]) => [...new Set(values)]
+    return [{
+      name: team,
+      team,
+      role: first.role,
+      description: TEAM_DESCRIPTIONS[team] ?? first.description,
+      mcpTools: unique(members.flatMap((profile) => profile.mcpTools)),
+      localTools: unique(members.flatMap((profile) => profile.localTools)),
+      skills: unique(members.flatMap((profile) => profile.skills)),
+      consumes: unique(members.flatMap((profile) => profile.consumes)),
+      emits: unique(members.flatMap((profile) => profile.emits)),
+      touchesHardware: members.some((profile) => profile.touchesHardware),
+      nativeWeb: members.some((profile) => profile.nativeWeb),
+    }]
+  })
+}
+
+function teamAction(
+  team: string,
+  catalog: AgentProfile[],
+  actions: Map<string, string>,
+): string | undefined {
+  const members = new Set(
+    catalog.filter((profile) => profile.team === team).map((profile) => profile.name),
+  )
+  return [...actions.entries()].reverse().find(([name]) => members.has(name))?.[1]
 }
 
 function Tail({
@@ -316,7 +544,7 @@ function Tail({
   )
 }
 
-function JobPicker({
+export function JobPicker({
   jobs,
   selected,
   onPick,
@@ -325,25 +553,115 @@ function JobPicker({
   selected: string | null
   onPick: (id: string) => void
 }) {
+  const [query, setQuery] = useState('')
+  const [showFinished, setShowFinished] = useState(false)
+  const normalized = query.trim().toLowerCase()
+  const matches = (job: JobEntry) => {
+    if (!normalized) return true
+    return jobSearchText(job).includes(normalized)
+  }
+  const active = jobs.filter((job) => !isFinished(job) && matches(job))
+  const finished = jobs.filter((job) => isFinished(job) && matches(job))
+  const selectedFinished = finished.find((job) => job.job_id === selected)
+  const recentFinished = finished.slice(0, 5)
+  // Keep the selected detail reachable without forcing the whole history open.
+  const preview = selectedFinished && !recentFinished.includes(selectedFinished)
+    ? [...recentFinished.slice(0, 4), selectedFinished] : recentFinished
+  const visibleFinished = showFinished ? finished : preview
+
   return (
-    <div className="picker">
-      {jobs.map((job) => {
-        const waiting = waitingOf(job)
-        const state = waiting?.status ?? job.state
-        return (
-          <button
-            key={job.job_id}
-            className={`job ${job.job_id === selected ? 'on' : ''}`}
-            onClick={() => onPick(job.job_id)}
-            title={waiting?.detail ?? ''}
-          >
-            <span className={`pill ${state}`}>{state}</span>
-            <span className="mono">{job.job_id}</span>
-          </button>
-        )
-      })}
+    <div className="job-picker">
+      <div className="job-picker-tools">
+        <input
+          aria-label="작업 검색"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="job · 목표 검색"
+        />
+        <span className="muted small">진행 {active.length} · 완료 {finished.length}</span>
+      </div>
+      <JobSection label="진행 중 / 확인 필요" jobs={active} selected={selected} onPick={onPick} empty="진행 중인 작업이 없습니다." />
+      {finished.length > 0 && (
+        <section className="job-section completed">
+          <header>
+            <b>최근 완료</b>
+            {finished.length > 5 && <button className="link" aria-expanded={showFinished}
+              onClick={() => setShowFinished((value) => !value)}>
+              {showFinished ? '접기' : `전체 ${finished.length}개`}
+            </button>}
+          </header>
+          <div className="picker">
+            {visibleFinished.map((job) => <JobButton key={job.job_id} job={job} selected={selected} onPick={onPick} />)}
+          </div>
+        </section>
+      )}
     </div>
   )
+}
+
+function JobSection({
+  label,
+  jobs,
+  selected,
+  onPick,
+  empty,
+}: {
+  label: string
+  jobs: JobEntry[]
+  selected: string | null
+  onPick: (id: string) => void
+  empty: string
+}) {
+  return (
+    <section className="job-section">
+      <header><b>{label}</b><span className="muted small">{jobs.length}</span></header>
+      <div className="picker">
+        {jobs.map((job) => <JobButton key={job.job_id} job={job} selected={selected} onPick={onPick} />)}
+        {jobs.length === 0 && <span className="muted small">{empty}</span>}
+      </div>
+    </section>
+  )
+}
+
+function JobButton({ job, selected, onPick }: { job: JobEntry; selected: string | null; onPick: (id: string) => void }) {
+  const waiting = waitingOf(job)
+  const state = waiting?.status ?? job.state
+  const caption = jobCaption(job)
+  return (
+    <button
+      className={`job ${job.job_id === selected ? 'on' : ''}`}
+      onClick={() => onPick(job.job_id)}
+      title={waiting?.detail ?? caption}
+    >
+      <span className={`pill ${state}`}>{clarificationQuestion(waiting) ? '답변 대기' : jobStateLabel(state)}</span>
+      <span className="job-copy"><b>{caption}</b><small className="mono">{job.job_id}</small></span>
+    </button>
+  )
+}
+
+function isFinished(job: JobEntry): boolean {
+  return job.state === 'done' || ('outcome' in job && Boolean(job.outcome))
+}
+
+function jobSearchText(job: JobEntry): string {
+  const waiting = waitingOf(job)
+  const row = 'objective' in job ? job : null
+  return [job.job_id, row?.gate, row?.objective, job.state, 'outcome' in job ? job.outcome : '', waiting?.detail ?? '']
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase()
+}
+
+function jobCaption(job: JobEntry): string {
+  if ('objective' in job) return job.objective || job.gate || job.job_id
+  return job.job_id
+}
+
+function jobStateLabel(state: string): string {
+  return ({
+    active: '실행 중', running: '진행', pending: '대기', blocked: '확인 필요', waiting_approval: '승인 대기',
+    waiting_person: '확인 필요', waiting_retry: '재시도 대기', done: '완료', finished: '완료',
+  } as Record<string, string>)[state] ?? state
 }
 
 function Progress({
@@ -443,6 +761,47 @@ function CancelJobButton({ jobId, platform }: { jobId: string; platform: Platfor
   )
 }
 
+export function recoveryKind(reason: string): 'plan' | 'deployment' | 'other' {
+  if (reason.startsWith('plan_format:') || (reason.startsWith('runtime_failure: lead-agent could not run while planning:')
+    && /invalid handoff JSON string:|final answer that is not one JSON object:/.test(reason))) return 'plan'
+  if (reason.startsWith('platform_deployment:')) return 'deployment'
+  return 'other'
+}
+
+export function ResumeStep({ jobId, platform, reason = '', retryUsed = false }: { jobId: string; platform: Platform; reason?: string; retryUsed?: boolean }) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const kind = recoveryKind(reason)
+  const resume = async () => {
+    if (!platform.api || !note.trim() || busy) return
+    setBusy(true)
+    try {
+      const answer = await platform.api.command({ type: 'job.resume', commandId: crypto.randomUUID(),
+        jobId, requestedBy: 'local-operator', note: note.trim() })
+      if (answer.ok !== true) throw new Error(String(answer.error ?? '재개할 수 없습니다'))
+      setMessage(kind === 'plan' ? '기존 job과 자료를 유지하고 계획을 다시 작성합니다.' : '완료된 단계는 보존하고, 막혔던 단계부터 재개합니다.')
+      platform.refresh()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error))
+    } finally { setBusy(false) }
+  }
+  if (kind === 'other') return <section className="pad job-resume">
+    <b>중단 원인 확인 필요</b><p className="muted">{reason || '중단 원인을 불러오는 중입니다.'}</p>
+    <p className="muted">이 오류는 드라이버 재개 대상이 아닙니다. 원인에 맞는 조치가 필요합니다.</p>
+  </section>
+  return <section className="pad job-resume">
+    <b>{kind === 'plan' ? '계획 응답 형식 오류' : '원인 해결 후 재개'}</b>
+    <p className="muted">{kind === 'plan'
+      ? '장비 실행 전 계획 JSON을 읽지 못했습니다. 기존 시나리오·자료로 계획만 다시 작성하며 웹 재검색은 하지 않습니다. 잘린 과거 응답의 원문을 복구하는 기능은 아닙니다. 장비 권한은 변경되지 않습니다.'
+      : '실행 전 드라이버 문제로 멈춘 단계만 재개합니다. 적용·재시작을 확인하며 장비 상태가 불명확하면 재실행하지 않습니다.'}</p>
+    {kind === 'plan' && retryUsed && <p className="error">이번 계획 재작성 기회를 이미 사용했습니다. 오류 검토가 필요합니다.</p>}
+    <input aria-label="재개를 위한 해결 내용" placeholder={kind === 'plan' ? '예: 기존 자료로 계획 재작성을 요청합니다' : '예: 수정본 검토·반영 후 데몬을 재시작했습니다'} value={note} onChange={(event) => setNote(event.target.value)} />
+    <button disabled={busy || !note.trim() || !platform.api || (kind === 'plan' && retryUsed)} onClick={() => void resume()}>{busy ? '재개 요청 중…' : kind === 'plan' ? '기존 자료로 계획 다시 작성' : '확인하고 해당 단계 재개'}</button>
+    {message && <p role="status">{message}</p>}
+  </section>
+}
+
 function ResultCard({
   result,
   jobId,
@@ -452,11 +811,6 @@ function ResultCard({
   jobId: string
   platform: Platform
 }) {
-  // A contract proposal is a different kind of result: its draft is an
-  // envelope, not a file, so it gets the panel rather than the reveal button.
-  const proposal = proposalOf(result)
-  if (proposal) return <ContractPanel proposal={proposal} jobId={jobId} platform={platform} />
-
   const artifacts = Array.isArray(result.artifacts)
     ? (result.artifacts as Array<{ artifactId: string; kind?: string; label?: string }>)
     : []
@@ -603,7 +957,7 @@ function EntryBlock({ entry }: { entry: Entry }) {
 function latestActions(turns: Turn[]): Map<string, string> {
   const result = new Map<string, string>()
   for (const turn of turns) {
-    const entry = [...turn.entries].reverse().find((item) => item.kind !== 'marker')
+    const entry = [...turn.entries].reverse().find((item) => item.kind !== 'marker' && item.kind !== 'other')
     if (entry) result.set(turn.agent, entry.title)
   }
   return result

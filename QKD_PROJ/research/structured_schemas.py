@@ -95,6 +95,14 @@ def discovery_handoff_schema(
 ) -> dict[str, Any] | None:
     """Return a closed semantic schema for a discovery handoff kind."""
 
+    if (kind == "Verdict" and agent == "verifier" and isinstance(task, dict)
+            and (task.get("resources") or {}).get("development_mode") == "autonomous-v1"):
+        return _base(kind, agent, {
+            "requirements_met": {"type": "boolean"},
+            "analysis": _TEXT,
+            "recommended_next_action": {"type": "string"},
+        })
+
     if kind == "MissionPlan":
         resources = task.get("resources") if isinstance(task, dict) else None
         agents = _strings(task, "available_execution_agents") if isinstance(task, dict) else []
@@ -270,6 +278,9 @@ def discovery_handoff_schema(
                 "source_claim_ids": _array(claim_id, maximum=128),
             }
         )
+        resolving_stall = (
+            isinstance(task, dict) and isinstance(task.get("research_resolution"), dict)
+        )
         return _base(
             kind,
             agent,
@@ -278,7 +289,11 @@ def discovery_handoff_schema(
                 "architecture_id": _ID,
                 "status": {
                     "type": "string",
-                    "enum": ["selected", "needs_research", "not_feasible"],
+                    "enum": (
+                        ["selected_with_constraints", "not_feasible"]
+                        if resolving_stall
+                        else ["selected", "needs_research", "not_feasible"]
+                    ),
                 },
                 "summary": _TEXT,
                 "decisions": _array(decision, maximum=64),

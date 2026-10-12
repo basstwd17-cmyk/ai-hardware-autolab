@@ -155,6 +155,68 @@ def _inside(project_root: Path, candidate: Path) -> Path | None:
     return resolved if resolved.exists() else None
 
 
+def _conversation_result(ledger, job_id, brief, project_root, runs_dir):
+    """Quote the recorded review; never manufacture deterministic gate counts."""
+    import hashlib
+    from .pagination import iter_events
+    job = ledger.job(job_id)
+    if job.state != DONE:
+        return None
+    replies = [e for e in iter_events(ledger, job_id) if e.kind == "conversation.turn.completed"]
+    last = replies[-1] if replies else None
+    root = Path(brief["workspace"]).resolve()
+    project = Path(project_root).resolve()
+    artifacts = []
+    # Stable identity includes the digest; a later version is not the same file.
+    seen = set()
+    for event in replies:
+        for item in event.payload.get("artifacts", []):
+            relative, digest = item["path"], item["sha256"]
+            identity = hashlib.sha256((relative + "\0" + digest).encode()).hexdigest()[:24]
+            if identity in seen:
+                continue
+            seen.add(identity)
+            path = _inside(project, root / relative)
+            try:
+                if path is None or not path.is_relative_to(root) or not path.is_file():
+                    continue
+                if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                    continue
+            except OSError:
+                continue
+            artifacts.append(Artifact("conversation:" + identity, "document", str(path),
+                                      str(project), relative))
+    # Expose only cited runs actually returned to this job, including identity
+    # observations. Verifier judges their relevance to the original scenario.
+    cited_runs = set(last.payload["reply"].get("runs", [])) if last else set()
+    from .conversation_flow import device_run_names
+    device_runs = set().union(*(device_run_names(event.payload)
+        for event in iter_events(ledger, job_id) if event.kind == "conversation.device.completed"))
+    for run in sorted(cited_runs & device_runs):
+        directory = _inside(project, Path(runs_dir) / run)
+        if directory is not None and directory.is_dir():
+            artifacts.append(Artifact(f"run:{run}", "run", str(directory),
+                                      str(project), run))
+    summary = last.payload["reply"]["summary"] if last else "에이전트 응답 전에 작업이 종료됐습니다."
+    sources = {}
+    for event in replies:
+        for source in event.payload.get("reply", {}).get("sources", []):
+            sources[(source["url"], source["finding"])] = source
+    if sources:
+        # The existing result view renders plain text, so preserve readable URLs
+        # as well as structured notes without requiring a frontend deployment.
+        summary += "\n\n조사 출처 (에이전트가 기록한 근거):\n" + "\n".join(
+            f"{item['title']} — {item['url']}\n{item['finding']}"
+            for item in sources.values())
+    if job.outcome != "satisfied":
+        summary = f"{job.outcome}: {summary}"
+    return {"jobId": job_id, "gate": job.gate, "iteration": job.iteration,
+            "outcome": job.outcome, "state": job.state, "title": "에이전트 검토 결과",
+            "summary": summary, "sources": list(sources.values()), "reasonCode": job.outcome,
+            "counts": condition_counts({}), "sourceKind": "conversation.turn.completed",
+            "artifacts": [a.metadata() for a in artifacts]}, artifacts
+
+
 def build_result(
     ledger: JobLedger,
     job_id: str,
@@ -167,6 +229,12 @@ def build_result(
     Returns None when there is nothing to show yet, so a caller sends no frame
     rather than an empty one.
     """
+    from .conversation_flow import WORKFLOW
+    briefs = ledger.handoffs(job_id, "Brief", 0)
+    if briefs and briefs[-1].payload.get("workflow") == WORKFLOW:
+        return _conversation_result(
+            ledger, job_id, briefs[-1].payload, project_root, runs_dir
+        )
     verdicts = ledger.handoffs(job_id, "Verdict")
     job = ledger.job(job_id)
     reports = ledger.handoffs(job_id, "Report")
@@ -235,20 +303,48 @@ def build_result(
         return payload, artifacts
 
     verdict = verdicts[-1].payload
+    from QKD_PROJ.orchestrator.development import autonomous
+    briefs = ledger.handoffs(job_id, "Brief", 0)
+    development = autonomous(briefs[-1].payload.get("resources")) if briefs else False
+    provisional = development and job.state != DONE
 
     counts = condition_counts(verdict)
     artifacts = collect_artifacts(
         verdict, report, runs_dir=runs_dir, project_root=project_root
     )
+    # Reveal the preserved isolated checkout for human review, never execute
+    # or merge it as a side effect of a passing Builder command.
+    for handoff in reversed(ledger.handoffs(job_id, "StepResult")):
+        review = handoff.payload.get("workspace_review")
+        if not isinstance(review, dict) or not isinstance(review.get("workspace"), str):
+            continue
+        directory = _inside(project_root.resolve(), Path(review["workspace"]))
+        if directory is not None and directory.is_dir():
+            artifacts.append(Artifact("workspace-review", "workspace", str(directory),
+                                      str(project_root.resolve()), "작업공간 · 변경 검토 (미병합)"))
+        break
+    diagnostic_rows = []
+    for handoff in ledger.handoffs(job_id, "StepResult", job.iteration):
+        diagnostic = handoff.payload.get("diagnostic_report") or {}
+        if diagnostic.get("complete") is True:
+            for rows in diagnostic.get("results", {}).values():
+                diagnostic_rows.extend(rows)
+    summary = ("작업 진행 중 · 조건 검사: " if provisional else "") + summarise(verdict, counts)
+    if diagnostic_rows:
+        heading = "진단 완료" if job.state == DONE and job.outcome == "satisfied" else "진단 결과"
+        observations = [f"{row['device']}: {row['device_verdict']}"
+                        + (f" ({row['failure_stage']})" if row.get("failure_stage") else "")
+                        for row in diagnostic_rows]
+        summary = heading + " · " + "; ".join(observations) + " — 장비 성공 여부와 작업 완료는 별개입니다. " + summary
     return {
         "jobId": job_id,
         "gate": verdict.get("gate"),
         "iteration": verdict.get("iteration"),
         # The job's outcome once it is finished; until then, this iteration's.
-        "outcome": job.outcome or verdict.get("outcome"),
+        "outcome": job.outcome or ("open" if provisional else verdict.get("outcome")),
         "verdictOutcome": verdict.get("outcome"),
         "state": job.state,
-        "summary": summarise(verdict, counts),
+        "summary": summary,
         "counts": counts,
         "failureSignature": verdict.get("failure_signature"),
         "hashMismatches": verdict.get("hash_mismatches") or [],

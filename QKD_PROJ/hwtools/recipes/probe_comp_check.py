@@ -1,15 +1,15 @@
 """Measure the scope's own probe compensation square wave.
 
-Purpose: prove the whole measurement path end to end -- configure, arm,
-acquire, retrieve statistics, judge -- against a signal the instrument
-generates itself. No DUT, no generator output, nothing to damage. If this does
-not pass, nothing measured on the board can be trusted either.
+Purpose: observe the instrument's probe compensation signal using the existing
+configure/acquire/record path. Historical qualification is an explicit option,
+not a prerequisite for every board measurement. No generator output is enabled.
 
 Connection: a passive probe from the front-panel [Probe Comp.] terminal to the
 channel under test, ground clip on the adjacent ground tab.
 
-Contract: contracts/scope-selftest-spec.yaml. Thresholds come from there, never
-from this file and never from a caller's opinion.
+By default report one waveform, not a historical qualification experiment.
+evaluation="contract" explicitly opts into the old contract's statistical test.
+Electrical/device checks apply in both modes.
 
 This is also the worked example of a recipe: it owns every setting that depends
 on what is being measured, and none of the transport or safety.
@@ -17,6 +17,7 @@ on what is being measured, and none of the transport or safety.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from ..instruments import RTM3004
@@ -32,10 +33,15 @@ AMPLITUDE_SLOT = 2
 def probe_comp_check(
     scope: RTM3004, params: dict[str, Any], gate: SafetyGate
 ) -> RecipeOutcome:
+    evaluation = params.get("evaluation", "report")
+    if evaluation not in {"report", "contract"}:
+        raise ValueError("evaluation must be report or contract")
     criteria = gate.pass_criteria()
 
     channel = int(params.get("channel", 3))
-    samples = int(params.get("n", 50))
+    samples = params.get("n", 1)
+    if type(samples) is not int or samples < 1:
+        raise ValueError("n must be a positive integer (acquisitions, not waveform points)")
     seconds_per_div = float(params.get("time_scale_s_per_div", 2e-4))
     volts_per_div = float(params.get("channel_scale_v_per_div", 0.5))
     trigger_level_v = float(params.get("trigger_level_v", 0.5))
@@ -54,10 +60,12 @@ def probe_comp_check(
     scope.scpi.write(f"TIM:SCAL {seconds_per_div:.6g}")
     scope.scpi.write("TIM:POS 0")
     scope.check_errors("timebase")
+    requested_points = params.get("record_length", 100_000)
+    actual_points = (scope.configure_record_length(requested_points)
+                     if requested_points is not None else None)
 
-    # AUTO rather than NORMal: if the probe falls off, an auto trigger lets the
-    # run finish and fail on the frequency criterion, instead of hanging until
-    # the timeout with nothing to show.
+    # AUTO rather than NORMal: even a missing signal produces an observable
+    # trace; absent frequency is reported, not manufactured as a PASS.
     scope.scpi.write("TRIG:A:MODE AUTO")
     scope.scpi.write("TRIG:A:TYPE EDGE")
     scope.scpi.write(f"TRIG:A:SOUR CH{channel}")
@@ -78,14 +86,31 @@ def probe_comp_check(
     scope.scpi.write(f"MEAS{AMPLITUDE_SLOT}:STAT:RES")
     scope.check_errors("statistics reset")
 
+    before = scope.front_end(channel)
+    scope.assert_high_impedance(channel)
+    expected_ratio = params.get("expected_probe_attenuation")
+    if expected_ratio is not None:
+        if (isinstance(expected_ratio, bool) or not isinstance(expected_ratio, (float, int))
+                or not math.isfinite(expected_ratio) or expected_ratio <= 0):
+            raise ValueError("expected_probe_attenuation must be a positive finite number")
+        if before.probe_attenuation != expected_ratio:
+            raise ValueError("configured probe attenuation differs from the expected physical ratio")
+
     # Exactly `samples` acquisitions, not "at least". Free-running RUN keeps
     # accumulating between polls, so the statistics would cover an unknown N.
-    scope.arm_nsingle(samples)
+    # A plain single shot does not require the history/statistics option.
+    # On K15 instruments reset any old Nx setting so SING is really one shot.
+    if samples == 1 and evaluation == "report":
+        scope.arm_single()
+    else:
+        scope.arm_nsingle(samples)
     scope.check_errors("arm")
     scope.wait_until_complete(timeout_s)
     scope.stop()
 
     front = scope.front_end(channel)
+    if expected_ratio is not None and front.probe_attenuation != expected_ratio:
+        raise ValueError("probe attenuation changed during acquisition")
     frequency = scope.read_measurement(FREQ_SLOT)
     amplitude = scope.read_measurement(AMPLITUDE_SLOT)
 
@@ -96,6 +121,12 @@ def probe_comp_check(
         "amplitude_sample_count": amplitude.waveform_count,
         "retrieval_path": "instrument_statistics",
         "acquisition_mode": "nx_single",
+        "evaluation": evaluation,
+        "requested_record_length": requested_points,
+        "configured_record_length": actual_points,
+        "front_end_before": before.as_measurements(),
+        "physical_probe_confirmation": params.get("physical_probe_confirmation"),
+        "probe_evidence_note": "SCPI readback is configured attenuation; physical ratio needs operator evidence.",
         # Only what this recipe chose. What the front end actually reports is
         # recorded by measure_scope() from the instrument, so a value set here
         # and silently overridden cannot be mistaken for the value in effect.
@@ -106,12 +137,25 @@ def probe_comp_check(
     measurements.update(amplitude.as_measurements("amplitude_v"))
 
     warnings: list[str] = []
-    verdict = _judge(frequency, amplitude, front, samples, criteria, warnings)
+    waveforms = ()
+    if evaluation == "report":
+        # Fixed host layer preserves the CSV and computes the five values once.
+        waveform = scope.read_waveform(channel, binary=True)
+        waveforms = (waveform,)
+        measurements.update(sample_count=len(waveform.values_v),
+                            requested_acquisition_count=samples,
+                            retrieval_path="stopped_binary_waveform",
+                            acquisition_mode="single" if samples == 1 else "nx_single",
+                            performance_verdict="not_requested")
+        verdict = None  # acquisition success is not a functional PASS
+    else:
+        verdict = _judge(frequency, amplitude, front, samples, criteria, warnings)
     return RecipeOutcome(
         measurements=measurements,
         verdict=verdict,
         warnings=warnings,
         probed_channels=(channel,),
+        waveforms=waveforms,
     )
 
 

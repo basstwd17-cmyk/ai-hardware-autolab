@@ -52,6 +52,8 @@ class FakeSsh:
         for needle, reply in self.rules:
             if needle in script:
                 return reply(self, script) if callable(reply) else reply
+        if "tr -d '\\000' </proc/device-tree/model; echo; uname -r" in script:
+            return (0, "TI AM335x BeagleBone Black\n5.10-test\n", "")
         return (0, "", "")
 
     def put_file(self, local: Path, remote: str) -> None:
@@ -185,7 +187,7 @@ def test_run_bbb_executes_allowlisted_script_and_records_everything(
     result = run_bbb(gate, "diagnose_rtase", record, transport=transport_for(fake))
 
     assert result.ok and result.verdict == "PASS"
-    assert stage_names(result) == ["safety_gate", "allowlist", "script_hash", "connect", "execute"]
+    assert stage_names(result) == ["safety_gate", "allowlist", "script_hash", "connect", "verify_target", "execute"]
     assert result.measurements["returncode"] == 0
     assert "BeagleBone Black" in result.measurements["stdout"]
     assert result.measurements["stderr"] == "warn\n"
@@ -194,7 +196,8 @@ def test_run_bbb_executes_allowlisted_script_and_records_everything(
     ).hexdigest()
     assert result.measurements["script_sha256"] == expected
     # the script body itself reached the board
-    assert "== remoteproc ==" in fake.scripts[0]
+    assert "/proc/device-tree/model" in fake.scripts[0]
+    assert "== remoteproc ==" in fake.scripts[1]
 
     kinds = {artifact.kind for artifact in result.artifacts}
     assert {"ssh_transcript", "bbb_stdout", "bbb_stderr"} <= kinds
@@ -253,7 +256,7 @@ def test_missing_connection_environment_fails_at_connect(gate: SafetyGate) -> No
 
     assert not result.ok
     assert result.measurements["failed_stage"] == "connect"
-    assert "BB_HOST" in (result.error or "")
+    assert "BB_PW" in (result.error or "")  # endpoint comes from the selected map
 
 
 def test_password_never_reaches_the_record(gate: SafetyGate, tmp_path: Path) -> None:

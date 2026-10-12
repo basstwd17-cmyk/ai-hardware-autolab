@@ -1,5 +1,11 @@
 # rtase-hwtools — MCP server
 
+This page documents the low-level standalone MCP interface, including legacy
+launch examples. The web platform's current entrypoint is the orchestrator
+daemon, whose role policy and Campaign callback govern hardware requests.
+`--allow-hardware` exposes tools; it is not a Campaign approval. See the
+project README and `webui/README.md` for the normal scenario workflow.
+
 The layer 3 tools, reachable from any runtime that speaks MCP. The agent above
 is replaceable; the tools, contracts and run records underneath are not.
 
@@ -13,6 +19,18 @@ No API key, no network, no third-party package: the stdio transport is
 newline-delimited JSON-RPC and is implemented in `protocol.py`.
 
 ## Two profiles
+
+For bounded evidence lookup, `list_runs(query="spi", limit=5)` filters run
+directory names by a case-insensitive literal substring before applying the
+limit. Without `query`, the existing listing remains available. `read_run`
+summary views excerpt large stdout/stderr in both the manifest and run status,
+marking omitted content; `detail="full"` and the original files remain unchanged.
+
+`list_contracts` now omits structurally incomplete generated hardware proposals
+by default (reported as `omitted_unready`). Use `include_unready=true` to inspect
+them for repair. `read_contract` keeps the raw YAML and includes `reuse.issues`.
+No files are deleted. A `not_flagged` listing is not approval, byte-integrity
+verification, or proof that a device is currently ready.
 
 | launch | tools |
 |---|---|

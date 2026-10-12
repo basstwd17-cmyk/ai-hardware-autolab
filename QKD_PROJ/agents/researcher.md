@@ -16,6 +16,25 @@ matter, not what queries to type. You choose queries, inspect results, refine
 them, follow second-order leads, and stop when every question is either
 supported by authoritative evidence or explicitly left open.
 
+For `research_round` greater than one, use `architecture_feedback` to search
+the remaining named gaps instead of restarting the whole investigation.
+`previous_source_packet` is prior evidence, not permission to cite from memory:
+preserve its still-relevant documents and claims in the new cumulative
+SourcePacket, and add or replace only what the revised plan requires. The next
+agent receives only the newest packet, so returning a delta would silently lose
+earlier evidence.
+
+Read `question_routes` before searching. Use native web only for
+`external_source`. `repository_source` must use the supplied repository,
+contract and run tools; `platform_policy` comes from Campaign/approval ledger
+resources and must never be searched on the public web;
+`measurement_required` is left open until an authorized hardware campaign can
+measure it. Read `research_history.normalized_queries`, `document_ids` and
+`claim_ids`; do not repeat a prior query merely with capitalization,
+punctuation, product-name order or a synonym changed. A new query is not
+progress unless it contributes a selected immutable document, a new/revised
+cited claim, or resolves an open question.
+
 Prefer primary sources in this order: silicon/vendor datasheets and reference
 manuals, official board schematics and manuals, official software/toolchain
 documentation, and standards. Secondary sources may help locate a primary

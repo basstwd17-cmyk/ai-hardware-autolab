@@ -45,6 +45,7 @@ method, exactly as in the loop.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
@@ -54,6 +55,7 @@ from QKD_PROJ.hwtools.result import sha256_file, utc_now
 from QKD_PROJ.orchestrator import jobs as J
 from QKD_PROJ.orchestrator import loop as L
 from QKD_PROJ.orchestrator.jobs import JobLedger
+from QKD_PROJ.orchestrator.clarification import USER_INPUT, pending_clarification
 from QKD_PROJ.orchestrator.pagination import last_event, tail_since
 from QKD_PROJ.orchestrator.loop import Advance, Loop
 
@@ -66,6 +68,7 @@ WAITING_APPROVAL = "waiting_approval"
 WAITING_RETRY = "waiting_retry"
 WAITING_PERSON = "waiting_person"
 RUNNABLE = "runnable"
+ACTIVE = "active"
 FINISHED = "finished"
 
 # Phrases a rate-limited runtime tends to produce. This is a fallback for
@@ -253,9 +256,11 @@ class HardwareApprovalGate:
         self.project_root = Path(project_root or PROJECT_ROOT)
         self.on_refusal = on_refusal
         self.active_campaign_sha256 = active_campaign_sha256
+        self.active_campaign_expires_at: str | None = None
         self.active_campaign_contracts = dict(active_campaign_contracts or {})
         self.now = now
         self.refusals: list[str] = []
+        self.scenario_authorizer = None
 
     def __call__(
         self,
@@ -265,7 +270,7 @@ class HardwareApprovalGate:
         params: dict[str, Any],
     ) -> bool:
         try:
-            return self._decide(agent, task, tool)
+            return self._decide(agent, task, tool, params)
         except Exception as exc:  # noqa: BLE001 - a gate that errors must refuse
             self._refuse(f"{tool}: the approval check itself failed: {exc}")
             return False
@@ -276,19 +281,31 @@ class HardwareApprovalGate:
             self.on_refusal(message)
         return False
 
-    def _decide(self, agent: AgentDefinition, task: dict[str, Any], tool: str) -> bool:
+    def _decide(self, agent: AgentDefinition, task: dict[str, Any], tool: str,
+                params: dict[str, Any] | None = None) -> bool:
         job_id = str(task.get("job_id") or "")
         if not job_id:
             return self._refuse(f"{tool}: the task names no job, so no approval can be found")
 
         step = task.get("step") if isinstance(task.get("step"), dict) else {}
         step_id = str(step.get("id", ""))
-        contract = str(step.get("contract") or task.get("gate") or "")
+        contract = str(
+            step.get("contract")
+            or task.get("contract")
+            or task.get("mission_id")
+            or task.get("gate")
+            or ""
+        )
         planned_tool = str(step.get("tool") or "")
         if planned_tool != tool:
             return self._refuse(
                 f"{tool}: the approved step plans tool {planned_tool!r}, not {tool!r}"
             )
+
+        if tool == "program_cpld_sram":
+            planned_xcf = (step.get("tool_args") or {}).get("program_xcf")
+            if planned_xcf is not None and (params or {}).get("program_xcf") != planned_xcf:
+                return self._refuse(f"{tool}: actual program_xcf differs from the prepared and approved input")
 
         granted = [
             a
@@ -307,6 +324,11 @@ class HardwareApprovalGate:
             )
 
         approval = granted[-1]
+        if str(approval.decided_by or "").startswith("scenario:"):
+            if self.scenario_authorizer is None or not self.scenario_authorizer.validate_grant(
+                approval, self.ledger.job(job_id), step, agent
+            ):
+                return self._refuse(f"{tool}: submitted scenario no longer authorizes this device operation")
         if str(approval.decided_by or "").startswith("policy:") and (
             not self.active_campaign_sha256
             or approval.bundle_sha256 != self.active_campaign_sha256
@@ -316,6 +338,8 @@ class HardwareApprovalGate:
                 f"{approval.bundle_sha256 or '(none)'}, which is not active in this daemon"
             )
         if str(approval.decided_by or "").startswith("policy:"):
+            if self.active_campaign_expires_at and J._moment(self.now()) >= J._moment(self.active_campaign_expires_at):
+                return self._refuse(f"{tool}: the active campaign has expired")
             expected_contract = self.active_campaign_contracts.get(contract)
             contract_path = self.contracts_dir / contract
             if expected_contract is None:
@@ -436,6 +460,20 @@ class Daemon:
         self.loop = loop
         self.policy = policy or SchedulerPolicy()
         self.now = now
+        self._activity_lock = threading.Lock()
+        self._active_job_id: str | None = None
+
+    def active_job_id(self) -> str | None:
+        """The job whose one scheduler step is executing in this process."""
+        with self._activity_lock:
+            return self._active_job_id
+
+    def is_active(self, job_id: str) -> bool:
+        return self.active_job_id() == job_id
+
+    def _set_active(self, job_id: str | None) -> None:
+        with self._activity_lock:
+            self._active_job_id = job_id
 
     # -- coming back after being away ---------------------------------------
 
@@ -469,6 +507,14 @@ class Daemon:
         if job.state == J.DONE:
             return Waiting(job_id, job.state, FINISHED, f"finished as {job.outcome}")
 
+        supports = getattr(self.loop, "supports", None)
+        if callable(supports) and not supports(job_id):
+            return Waiting(job_id, job.state, WAITING_PERSON,
+                           "historical workflow is retired; submit a new scenario to continue development")
+
+        if self.is_active(job_id):
+            return Waiting(job_id, job.state, ACTIVE, "agent turn in progress")
+
         if job.state == J.AWAITING_APPROVAL:
             pending = self.ledger.pending_approvals(job_id, moment)
             if pending:
@@ -489,6 +535,11 @@ class Daemon:
         return Waiting(job_id, job.state, RUNNABLE, "ready")
 
     def _blocked_waiting(self, job: J.Job, moment: str) -> Waiting:
+        question = pending_clarification(self.ledger, job.job_id)
+        if question is not None:
+            if question.answers:
+                return Waiting(job.job_id, job.state, RUNNABLE, "user input received; re-plan")
+            return Waiting(job.job_id, job.state, WAITING_PERSON, f"{USER_INPUT}: {question.question}")
         current = _blocked_reason(self.ledger, job.job_id)
         reason, at = current if current else ("", job.updated_at)
 
@@ -549,28 +600,41 @@ class Daemon:
             return Tick(None, waiting=[w for w in survey if w.status != FINISHED])
 
         chosen = ready[0].job_id
-        # A blocked-but-ready job has to be released before the loop will look
-        # at it: `blocked` is a state a person or a clock leaves, not one the
-        # loop walks out of on its own.
-        if self.ledger.job(chosen).state == J.BLOCKED:
-            self.ledger.transition(
-                chosen, J.RUNNING, reason=f"scheduler resumed: {ready[0].detail}"
-            )
+        self._set_active(chosen)
         try:
-            advanced = self.loop.advance(chosen)
-        except Exception as exc:  # noqa: BLE001 - one bad job must not kill the scheduler
-            reason = f"scheduler_failure: {type(exc).__name__}: {exc}"
-            job = self.ledger.job(chosen)
-            if job.state not in (J.BLOCKED, J.DONE):
-                self.ledger.transition(chosen, J.BLOCKED, reason=reason)
-            advanced = Advance(
-                L.BLOCKED,
-                chosen,
-                job.iteration,
-                reason,
-                blocked=True,
-                reason_code="scheduler_failure",
-            )
+            # A blocked-but-ready job has to be released before the loop will look
+            # at it: `blocked` is a state a person or a clock leaves, not one the
+            # loop walks out of on its own.
+            if self.ledger.job(chosen).state == J.BLOCKED:
+                self.ledger.transition(
+                    chosen, J.RUNNING, reason=f"scheduler resumed: {ready[0].detail}"
+                )
+            try:
+                advanced = self.loop.advance(chosen)
+            except Exception as exc:  # noqa: BLE001 - one bad job must not kill the scheduler
+                reason = f"scheduler_failure: {type(exc).__name__}: {exc}"
+                job = self.ledger.job(chosen)
+                if job.state == J.DONE:
+                    advanced = Advance(
+                        L.FINISHED,
+                        chosen,
+                        job.iteration,
+                        f"job finished while its step was returning: {job.outcome}",
+                        outcome=job.outcome,
+                    )
+                else:
+                    if job.state != J.BLOCKED:
+                        self.ledger.transition(chosen, J.BLOCKED, reason=reason)
+                    advanced = Advance(
+                        L.BLOCKED,
+                        chosen,
+                        job.iteration,
+                        reason,
+                        blocked=True,
+                        reason_code="scheduler_failure",
+                    )
+        finally:
+            self._set_active(None)
         return Tick(advanced, waiting=[w for w in survey if w.job_id != chosen])
 
     def run(self, ticks: int = 100, now: Callable[[], str] | None = None) -> list[Tick]:
@@ -598,7 +662,14 @@ class Daemon:
             "cursor": self.ledger.latest_event_id(),
             "jobs": {
                 status: [w.describe() for w in survey if w.status == status]
-                for status in (RUNNABLE, WAITING_APPROVAL, WAITING_RETRY, WAITING_PERSON, FINISHED)
+                for status in (
+                    ACTIVE,
+                    RUNNABLE,
+                    WAITING_APPROVAL,
+                    WAITING_RETRY,
+                    WAITING_PERSON,
+                    FINISHED,
+                )
             },
             "inbox": [a.describe() for a in self.ledger.pending_approvals(now=moment)],
         }

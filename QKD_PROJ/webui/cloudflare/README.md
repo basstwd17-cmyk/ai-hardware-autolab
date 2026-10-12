@@ -7,11 +7,20 @@ the existing named-pipe daemon, and the local SQLite ledger remains decisive.
 
 ## What crosses the boundary
 
+The knowledge map is `/knowledge.html`, linked from Remote control. The relay
+also copies knowledge events (statements, scope, source jobs, evidence metadata)
+to a device-scoped D1 replica. The existing operator token reads it; the device
+token appends replication batches. Locators may be included, but referenced file
+contents and credentials are not uploaded. The local DB remains authoritative.
+Apply `schema.sql` on upgrade to add the two knowledge tables, deploy Pages,
+then restart daemon and relay. Saved terminal conversation results are caught up
+without model/device calls. Offline views show the last synchronization state.
+
 - outbound: compact job state, path-free result/evidence cards, pending approval
   details and ledger cursor;
 - inbound: one allowlisted command (`mission.start`, campaign preview/approve,
   pending approval accept/decline, mission revision, steer or cancel);
-- never: arbitrary shell commands, MCP calls, artifact paths, login files or
+- never: arbitrary shell commands, MCP calls, login files or
   the local web session token.
 
 A cloud command moves `pending -> claimed -> completed`. A claimed command is

@@ -216,10 +216,10 @@ def _next_action(
         if not current_verdict:
             return {"kind": "verify", "agent": "verifier", "label": "reported steps의 증거 판정"}
         if verdict is not None and verdict.payload.get("outcome") == "open":
-            return {"kind": "replan", "agent": "gate-architect", "label": "다음 iteration 재계획"}
+            return {"kind": "replan", "agent": "lead-agent", "label": "다음 iteration 재계획"}
 
     phase_actions = {
-        "mission_plan": ("mission-architect", "시나리오·기존 지식·필요 자료 계획"),
+        "mission_plan": ("lead-agent", "시나리오·기존 지식·필요 자료 계획"),
         "research_plan": ("system-architect", "조사 질문과 출처 계획"),
         "research": ("researcher", "데이터시트·공식 자료 조사"),
         "change_analysis": ("change-analyst", "기존 기준과 조사 결과의 차이 분석"),
@@ -227,7 +227,7 @@ def _next_action(
         "contract_draft": ("contract-drafter", "실행 계약 초안 작성"),
         "contract_review": ("contract-reviewer", "계약의 근거와 실행 범위 검토"),
         "decide": ("platform", "검토 결과에 따른 다음 workflow 결정"),
-        "plan": ("gate-architect", "계약에 따른 실행 계획"),
+        "plan": ("lead-agent", "자료 확인과 실행 구조 계획"),
         "reduce": ("verifier", "run 기록으로 조건 판정"),
         "report": ("reporter", "검증 결과 보고"),
     }

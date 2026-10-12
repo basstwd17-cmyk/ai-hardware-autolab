@@ -66,6 +66,7 @@ export function useTranscript(api: Api | null, jobId: string | null, cursor: num
   // A fetch in flight when the cursor moves again must not have its answer
   // overwritten by the older one; the generation drops superseded reads.
   const generation = useRef(0)
+  const inFlight = useRef<{ api: Api; jobId: string; generation: number; rerun: boolean } | null>(null)
   const live = useRef(true)
 
   useEffect(() => {
@@ -76,15 +77,27 @@ export function useTranscript(api: Api | null, jobId: string | null, cursor: num
   }, [])
 
   const read = useCallback(
-    async (fromScratch: boolean) => {
+    async function read(fromScratch: boolean): Promise<void> {
       if (!api || !jobId) {
+        generation.current += 1
+        inFlight.current = null
         held.current = { jobId: null, events: [], upTo: 0 }
         setState(EMPTY)
         return
       }
+      // A fast global cursor must not repeatedly invalidate a slow history
+      // read. Finish it, then fetch its tail once; only a different job/API or
+      // explicit reload supersedes it.
+      if (!fromScratch && inFlight.current?.jobId === jobId && inFlight.current.api === api) {
+        inFlight.current.rerun = true
+        return
+      }
       const mine = ++generation.current
+      const request = { api, jobId, generation: mine, rerun: false }
+      inFlight.current = request
       if (fromScratch || held.current.jobId !== jobId) {
         held.current = { jobId, events: [], upTo: 0 }
+        setState(EMPTY)
       }
       setState((current) => ({ ...current, loading: true, error: null }))
 
@@ -128,6 +141,11 @@ export function useTranscript(api: Api | null, jobId: string | null, cursor: num
       } catch (exc) {
         if (mine !== generation.current || !live.current) return
         setState((current) => ({ ...current, loading: false, error: String(exc) }))
+      } finally {
+        if (inFlight.current === request) {
+          inFlight.current = null
+          if (request.rerun && live.current && mine === generation.current) void read(false)
+        }
       }
     },
     [api, jobId],

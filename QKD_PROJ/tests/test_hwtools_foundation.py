@@ -111,6 +111,21 @@ def test_gate1_probe_constraint_excludes_50_ohm_channels(gate: SafetyGate) -> No
         assert channel not in allowed
 
 
+def test_rtase_rf_output_keeps_scope_high_impedance_and_cn1_at_15_v(
+    gate: SafetyGate,
+) -> None:
+    """Do not turn the RF connector's source impedance into scope loading."""
+    analog = gate.contracts.board_map["analog_output_stage"]
+    assert analog["series_output"] == "49.9 ohm (R9, R12)"
+    assert analog["nominal_sma_source_impedance_ohm"] == 50
+    assert analog["scope_measurement"]["termination"] == "1_Mohm"
+    rails = analog["supply_limits"]
+    assert rails["positive_rail_max_v"] == 15.0
+    assert rails["negative_rail_min_v"] == -15.0
+    assert rails["absolute_rail_max_v"] == 15.0
+    assert rails["current_limit"] == "UNVERIFIED"
+
+
 def test_unapproved_probe_point_blocks(gate: SafetyGate) -> None:
     # Exercise the guard on an isolated fixture value. The production contract
     # can be approved for a live run without making this safety test stale.

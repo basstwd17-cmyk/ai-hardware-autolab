@@ -71,6 +71,18 @@ def agents(snapshot) -> list[str]:
     return [o["agent"] for o in snapshot["occupants"]]
 
 
+def test_conversation_turns_and_feedback_use_existing_office_projection():
+    projection = build([
+        event(1, 'job_1', 'conversation.turn.started', agent='lead'),
+        event(2, 'job_1', 'conversation.turn.completed', agent='lead'),
+        event(3, 'job_1', 'conversation.feedback', {'message': 'integer'}, agent='local-operator'),
+    ])
+    snapshot = projection.snapshot()
+    assert agents(snapshot) == ['lead']
+    assert snapshot['occupants'][0]['activity'] == O.WAITING
+    assert snapshot['occupants'][0]['turns'] == 1
+
+
 # -- who gets a desk ----------------------------------------------------------
 
 

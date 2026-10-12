@@ -66,7 +66,7 @@ def test_a_profile_gap_does_not_route_work_to_a_similarly_named_board_builder(tm
         "hardware access is requested."
     )
 
-    response = control.mission(
+    response = control.legacy_mission(
         "develop another board",
         scenario,
         scenario_sha256(scenario),
@@ -75,7 +75,11 @@ def test_a_profile_gap_does_not_route_work_to_a_similarly_named_board_builder(tm
     resources = brief["resources"]
 
     assert resources["board_development"]["selected"]["board_id"] == "nucleo-g474re"
-    assert resources["available_execution_agents"] == ["reporter", "verifier"]
-    assert "design-builder" not in resources["available_execution_agents"]
-    assert "firmware-builder" not in resources["available_execution_agents"]
-    assert all(tool.startswith(("read_", "list_")) for tool in resources["available_tools"])
+    assert resources["available_execution_agents"] == ["builder", "verifier"]
+    assert resources["legacy_execution_agents"] == ["reporter", "verifier"]
+    assert "codex_workspace" in resources["available_tools"]
+    # The catalog must not route to another board, but no longer hides useful
+    # primitives. Actual hardware authority is checked at invocation.
+    assert resources["development_mode"] == "autonomous-v1"
+    assert resources["available_tools"] == control._development_tools("hardware")
+    assert "measure_scope" in resources["available_tools"]

@@ -7,7 +7,7 @@
     {
       "binding": "RELAY_DB",
       "database_name": "rtase-relay",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
     }
   ]
 }

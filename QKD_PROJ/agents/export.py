@@ -124,6 +124,11 @@ def render_codex_prompt(agent: AgentDefinition) -> str:
         "Call no other tool on that server. If a tool you need is not listed, stop and",
         "say which one and why -- do not substitute a different tool for it.",
     ]
+    if agent.source and agent.source.parent.name == "simple":
+        header[-2:] = [
+            "Use normal Codex file/search/command capabilities for ordinary development.",
+            "The MCP list describes device/record helpers, not a requirement to turn each function into a tool.",
+        ]
     if agent.touches_hardware:
         header += [
             "",
@@ -139,7 +144,9 @@ def render_codex_prompt(agent: AgentDefinition) -> str:
     if agent.skills:
         header += [
             "",
-            "Load these skills from the MCP server's prompts before you start: "
+            ("Use only relevant skills; do not load unrelated board workflows: "
+             if agent.name in {"lead-agent", "builder", "verifier"}
+             else "Load these skills from the MCP server's prompts before you start: ")
             + ", ".join(agent.skills)
             + ".",
         ]

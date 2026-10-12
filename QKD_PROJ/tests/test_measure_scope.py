@@ -55,7 +55,8 @@ RESPONSES: dict[str, str] = {
     "MEAS2:STAT:VAL:ALL?": "1.61,1.63",
 }
 
-PARAMS = {"channel": 3, "n": N, "timeout_s": 2.0}
+PARAMS = {"channel": 3, "n": N, "timeout_s": 2.0,
+          "evaluation": "contract", "record_length": None}
 
 
 def selftest_gate(allow_hardware: bool = True) -> SafetyGate:
@@ -267,7 +268,8 @@ def test_failing_recipe_still_returns_a_result_and_a_transcript() -> None:
     result = run(explodes, {}, selftest_gate())
     assert result.ok is False
     assert "probe fell off" in result.error
-    assert "WGEN:OUTP OFF" in result.commands  # emergency_stop ran
+    # Passive capture has no authority to alter even an unrelated generator output.
+    assert "WGEN:OUTP OFF" not in result.commands
     assert "STOP" in result.commands
 
 

@@ -16,6 +16,7 @@ SCPI syntax below was checked against the RTM3000 user manual
 
 from __future__ import annotations
 
+import math
 import struct
 import time
 from dataclasses import dataclass
@@ -312,7 +313,7 @@ class RTM3004:
             raw = self.scpi.query(f"CHAN{channel}:DATA?")
             values = [float(v) for v in raw.split(",") if v.strip()]
 
-        return Waveform(
+        waveform = Waveform(
             channel=channel,
             x_start_s=x_start,
             x_stop_s=x_stop,
@@ -320,6 +321,12 @@ class RTM3004:
             values_per_sample=values_per_sample,
             values_v=values,
         )
+        # The host persists acquisition evidence before recipe-side analysis.
+        # A copied instrument still uses its own (possibly bounded) SCPI object.
+        sink = getattr(self, "waveform_sink", None)
+        if sink is not None:
+            sink(waveform)
+        return waveform
 
     def save_screenshot(self, path: Path) -> Path:
         """Transfer the live screen.
@@ -342,6 +349,22 @@ class RTM3004:
 
     # -- safe state ----------------------------------------------------------
 
+    def configure_record_length(self, points: int) -> int:
+        """Select acquisition size before capture; record the instrument's value.
+
+        RTM3000 manual, ACQuire:POINts[:VALue]: setting a value disables
+        automatic record length and the instrument may choose the nearest size.
+        This is not host-side decimation and never discards a captured trace.
+        """
+        if type(points) is not int or points < 2:
+            raise ValueError("record_length must be an integer of at least 2 samples")
+        self.scpi.write(f"ACQ:POIN {points}")
+        self.check_errors("record length")
+        raw = float(self.scpi.query("ACQ:POIN?"))
+        if not math.isfinite(raw) or raw < 2 or raw != int(raw):
+            raise ScpiError(f"Invalid record length readback: {raw}")
+        return int(raw)
+
     def arm_nsingle(self, count: int) -> None:
         """Arm exactly `count` acquisitions and start them.
 
@@ -354,6 +377,13 @@ class RTM3004:
             raise ValueError(f"count must be at least 1, got {count}")
         self.require_option("K15")
         self.scpi.write(f"ACQ:NSIN:COUN {count}")
+        self.scpi.write("SING")
+
+    def arm_single(self) -> None:
+        """One observation, without inheriting a previous Nx Single count."""
+        if "K15" in self.identify().options:
+            self.scpi.write("ACQ:NSIN:COUN 1")
+            self.check_errors("single acquisition count")
         self.scpi.write("SING")
 
     def wait_until_complete(

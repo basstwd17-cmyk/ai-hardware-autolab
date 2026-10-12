@@ -1,189 +1,70 @@
-# Agent definitions
+# Current scenario agents
 
-Thirteen agents, split across mission planning, discovery and execution. A person writes a
-**Brief** — the scenario and the resources it may use. The mission architect loads the
-existing contract and knowledge, chooses research questions, required materials, registered
-execution agents and registered skills, and records those choices in a **MissionPlan**.
-Discovery then refreshes cited source material and compares it with the baseline before the
-development loop runs until it can say, from evidence, that the gate is closed or why it is not.
+New missions run through `orchestrator/conversation_flow.py` and its
+`INSTRUCTIONS`. `conversation_codex.py` passes those instructions and the
+ledger-derived context to Codex. `conversation_service.py` connects the runtime
+to the isolated job workspace and the host hardware adapter.
 
-```
-Brief (a person)
-   │
-   ├─▶ mission-architect ──MissionPlan──▶ researcher ──SourcePacket
-   │                                      │
-   │                                      ▼
-   │                               change-analyst ──ChangeAnalysis
-   │                                      │
-   │                                      ▼
-   │                               architecture-selector
-   │
-   ├─▶ system-architect ──ResearchPlan──▶ researcher   legacy contract-gap path
-   │                                                   │ read-only web research
-   │                                                   ▼
-   │      contract-reviewer ◀─ContractDraft─ contract-drafter
-   │               ▲                              ▲
-   │         ContractReview              ArchitectureDecision
-   │               │                              │
-   │               └──────── architecture-selector
-   │
-   ▼
-gate-architect ──Plan──┐
-   ▲                   │
-   │                   ├─▶ design-builder ─┐   offline, unattended
-   │                   ├─▶ board-operator ─┤   changes board state, one approved step
-   │                   └─▶ measurement   ──┤   observes only
-   │                                       │
-   │                              StepResult
-   │                                       ▼
-   └──── Verdict (not satisfied) ──── verifier      reads runs/ only
-                                          │
-                                    satisfied / needs_approval
-                                    / contract_gap / exhausted
-                                          ▼
-                                      reporter ──▶ docs/…md
-```
+| Role | Responsibility | Execution |
+|---|---|---|
+| Lead | Understand the original scenario, research missing facts, choose an approach and observable completion criteria | Workspace reading, web research and selective connection checks |
+| Builder | Implement, build, test, correct failures and request device operations | Workspace edits/commands; hardware through the host adapter |
+| Verifier | Compare current artifacts and device results with the original scenario and feedback | Read, assess and optionally check connections; return concrete corrections |
 
-| Agent | Role | Touches board | Can write |
-|---|---|---|---|
-| `mission-architect` | discover | no | nothing |
-| `change-analyst` | discover | no | nothing |
-| `system-architect` | discover | no | nothing |
-| `researcher` | research | no | nothing |
-| `architecture-selector` | discover | no | nothing |
-| `contract-drafter` | plan | no | nothing |
-| `contract-reviewer` | verify | no | nothing |
-| `gate-architect` | plan | no | nothing |
-| `design-builder` | build | no | its design directory |
-| `board-operator` | operate | **yes** | nothing |
-| `measurement` | measure | **yes** (read-only) | nothing |
-| `verifier` | verify | no | nothing |
-| `reporter` | report | no | `docs/` |
+## Handoff
 
-## Four things the shape is for
+Agents exchange a short reply containing status, summary, artifacts, sources
+and relevant run references. Every role can request a `check_connections`
+device call with an explicit `devices` list. Builder also requests implementation
+and measurement device calls. After a tool result, the requesting role continues.
+The ledger carries the original scenario, user feedback, previous replies,
+research findings, artifact hashes and device results into the next turn.
 
-**The planner cannot write, and the verifier cannot write.** Both ends of the
-loop are read-only. A plan is reviewed before anything happens; a verdict is
-worth reading precisely because the agent producing it has no way to change
-what it judges.
+No role writes an execution contract, compiled Plan, Gate or Campaign.
+There is no contract-approval step between agents. Lead's design and acceptance
+criteria guide the engineering work; Verifier assesses the returned evidence.
 
-**The agent that changed the board is not the agent that reports on it.**
-`board-operator` programs, deploys and reboots. `measurement` only observes.
-The split is enforced by the tool lists, not by instruction.
+## Hardware execution
 
-**Verdicts are copied, never authored.** `hwtools` judges PASS/FAIL against the
-contract deterministically. An agent may carry that value forward. If a tool did
-not judge, the field stays empty rather than being filled in by a model.
+There is no startup connection sweep. Agents choose only devices needed for the
+scenario, reuse timestamped `inputs.hardware_connections` from the job ledger,
+and request a fresh observation when needed. `inputs.hardware_devices` describes
+the installed setup, not a live observation. Connection checks do not detect wiring
+or prove output functionality. Hardware mode permits tools; source-only work can
+finish without contacting devices. Verifier judges required evidence against the
+original goal, and cited run names must come from this job's actual tool results.
 
-**Every advance condition names a field and a source.** `field` is a path into
-the `ToolResult` the step produces, so the verifier reads it out of
-`run_status.json` instead of asking anyone how it went. `source` is the
-datasheet page, contract field or prior run the number came from — the
-validator rejects an empty one, because an untraceable threshold reads as
-though somebody measured it.
+Builder chooses a tool and supplies its ordinary arguments. The host binds the
+installed equipment, validates workspace paths and device identity/electrical
+limits, executes the operation and records the result. Newly written workspace
+scripts and SRAM images need no per-scenario registration.
 
-## How the loop ends
+Hardware is the default operator mode; Offline hides physical-device tools.
+Supported operations within a submitted Hardware scenario run automatically.
+Unknown outcomes after device contact are not replayed automatically. Missing
+physical facts can produce a question; ordinary implementation errors return
+to the agent that can fix them.
 
-`satisfied` is the only success. The other three are real outcomes and get
-written up the same way:
+The Start view selects a registered board/setup per job. `inputs.selected_board`
+contains that board's source paths, datasheets, notes and device descriptions.
+Use those facts rather than assuming other workspace board folders describe the
+selected hardware. Knowledge retrieval follows the selected board and revision.
+New USB/serial configurations use stable device IDs in `check_connections`.
+OS presence is not board identity. Builder can use `serial_exchange` for the
+documented serial protocol; USB enumeration alone does not enable programming.
+The current generic registration path does not include firmware flash adapters.
+Existing RTM3004 settings can be reused with user-declared wiring for the new board.
 
-| Outcome | Meaning |
-|---|---|
-| `satisfied` | every condition met, each with a run behind it |
-| `needs_approval` | a person has to sign before the next step may run |
-| `contract_gap` | the plan needs authority no contract grants |
-| `exhausted` | the same failure for three iterations, no new evidence |
-| `primary_run_missing` | a run the gate depends on is not on disk |
+## Source of truth and history
 
-One more, `open`, is a **Verdict** outcome only: this iteration ended and the
-loop did not. A Report may not carry it, because a report describes a loop that
-stopped.
+- Current prompts: `orchestrator/conversation_flow.py::INSTRUCTIONS`.
+- Runtime and response schema: `orchestrator/conversation_codex.py`.
+- Equipment calls: `orchestrator/conversation_hardware.py`.
+- Installed RTASE setup: `boards/rtase-v1/v1.0/hardware.yaml`.
+- `agents/simple/`, other role Markdown files, `agents/codex/`, and the
+  export/schema utilities describe historical Plan workflows. The production
+  daemon no longer initializes those workflows. Keep their records readable;
+  do not use their Campaign/contract instructions for new missions.
 
-`exhausted` is what stops a loop from spinning. `gate-architect` must name a
-concrete change on every re-plan — a different measurement point, a slower
-clock, a split step — and when it cannot, the honest move is to stop and record
-what would distinguish the remaining explanations.
-
-## Using them
-
-```powershell
-py -3 -m QKD_PROJ.agents.export --check-only                                 # validate
-py -3 -m QKD_PROJ.agents.export --runtime claude --profile hardware --write  # .claude/agents/*.md
-py -3 -m QKD_PROJ.agents.export --runtime codex  --profile hardware --write  # agents/codex/*.md
-py -3 -m QKD_PROJ.agents.export --runtime claude --profile offline           # --agents JSON
-```
-
-Two profiles, matching the MCP server's two profiles:
-
-- `offline` — all read-only discovery agents plus `gate-architect`,
-  `design-builder`, `verifier`, `reporter`. This
-  is the set for an unattended `claude -p --agents <json>` run: the
-  board-touching agents are not in it at all.
-- `hardware` — all eleven. This is the set written to disk, because an
-  interactive session has a person at the bench. Their tools still do not
-  exist unless the server was started `--allow-hardware`, which `.mcp.json`
-  does not do.
-
-The checked-in exports must match the definitions; `test_agents.py` fails if
-they drift, because a stale prompt is read by the runtime while the reviewer
-reads the source.
-
-## Adding an agent
-
-1. Write `<name>.md` here. Frontmatter: `name` (must match the file), `role`
-   from `schema.ROLES`, `description`, `emits`, and the tools it needs.
-2. `--check-only` will refuse an unknown tool, a board tool on an agent that
-   declares `touches_hardware: false`, a `verify` agent that can write, and a
-   `consumes` kind nothing emits.
-3. Add its case to `tests/test_agents.py` if it carries a new boundary.
-4. Re-export. The MCP server serves definitions as prompts named
-   `agent-<name>`, so Codex picks up the change without an export at all.
-
-## What is not enforced here
-
-Claude Code applies a per-agent tool allowlist, so `tools` really does bound
-that agent. Codex has no equivalent, so on that runtime the boundary is the
-server's launch profile — without `--allow-hardware` the board tools are not
-registered for anyone. Two mechanisms, one rule, and the rule is chosen at
-launch by a person rather than by a definition.
-
-Nothing here tests that a model obeys its prompt. What the tests assert is that
-the permission a definition grants matches the permission its prompt describes,
-and that an envelope carrying an unevidenced claim is rejected before the next
-agent reads it.
-
-## Running the loop through Codex App Server
-
-`QKD_PROJ.orchestrator.codex_runner.CodexAgentRunner` implements the loop's
-`AgentRunner` seam without reading an API key or a Codex credential file. The
-installed Codex CLI owns login and the runner speaks its stdio JSONL protocol.
-
-Each call starts a fresh ephemeral thread. The ledger-derived task is complete,
-so a prior conversation is never a hidden second source of loop state. App
-Server processes are cached by agent name because each one launches
-`rtase-hwtools --role <agent>`; roles therefore do not share a broader MCP tool
-set merely because they run in the same outer loop.
-
-```python
-from QKD_PROJ.orchestrator.codex_runner import CodexAgentRunner, CodexRunnerConfig
-from QKD_PROJ.orchestrator.loop import Loop
-
-with CodexAgentRunner(CodexRunnerConfig(profile="offline")) as runner:
-    step = Loop(ledger, runner).advance(job_id)
-```
-
-The `hardware` profile only makes the selected role's hardware tools visible.
-It does not approve them. Supply `hardware_approval` as a callback that verifies
-the current JobLedger approval against the agent, step, contract and tool. With
-no callback, every hardware MCP request is refused and the loop becomes
-`blocked`; a runtime can never turn its own request into a signature.
-
-Pass `event_sink` to receive raw App Server notifications. The daemon may
-normalize those into its event ledger for UI observability; they are not handoff
-evidence and do not decide loop state.
-
-The `researcher` is the only definition with `native_web: true`. Its runner
-enables native live search and supplies dynamic tools that collect a selected
-PDF into `ReferenceStore`, search its extracted text and read cited pages.
-Other roles launch with native web search disabled, so research authority does
-not silently spread to builders or board operators.
+See [the current flow](../docs/unified-scenario-flow.md) and
+[board-independent development design](../docs/board-independent-development.md).

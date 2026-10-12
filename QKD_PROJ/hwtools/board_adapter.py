@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from QKD_PROJ.boards.profiles import BoardProfile
+from QKD_PROJ.orchestrator.execution_guard import require_offline_workspace_command
 
 from .record import RunRecord
 from .result import FAIL, PASS, ToolResult
@@ -79,6 +80,10 @@ def run_profile_stage(
         gate.require(operation)
         cwd = _inside(root, str(stage.cwd), f"stage {stage_id} cwd")
         argv = _argv(stage.command, root)
+        if stage.mode == "offline":
+            # A profile cannot relabel a programmer/SSH/SCPI command as an
+            # offline build and thereby inherit the build operation's authority.
+            require_offline_workspace_command(subprocess.list2cmdline(argv))
         result.commands = [subprocess.list2cmdline(argv)]
         completed = subprocess.run(
             argv,

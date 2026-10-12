@@ -12,6 +12,7 @@ from QKD_PROJ.research.architecture import ArchitectureDecision, ContractDraft, 
 from .models import KnowledgeCandidate, KnowledgeClaim, KnowledgeScope
 from .reducer import KnowledgeReducer
 from .store import KnowledgeEvent, KnowledgeStore
+from .verdict_ingestor import candidates_from_reduction
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,53 @@ def candidates_from_source_packet(
             envelope["source_job_id"] = source_job_id
         result.append(KnowledgeCandidate.parse(envelope))
     return tuple(result)
+
+
+def candidates_from_simple_plan(
+    plan: dict,
+    scope: KnowledgeScope,
+    *,
+    source_job_id: str | None = None,
+) -> tuple[KnowledgeCandidate, ...]:
+    """Project page-cited facts learned by the three-agent Lead."""
+    rows: list[KnowledgeCandidate] = []
+    for finding in plan.get("research_findings") or []:
+        if not isinstance(finding, dict):
+            continue
+        evidence = [
+            {
+                "kind": "document_page",
+                "role": "supports",
+                "locator": citation["document_id"],
+                "sha256": citation["document_id"],
+                "page": citation["page"],
+                "excerpt": citation["excerpt"],
+            }
+            for citation in finding.get("citations") or []
+            if isinstance(citation, dict)
+        ]
+        envelope = {
+            "kind": "KnowledgeCandidate",
+            "producer": str(plan.get("agent") or "lead-agent"),
+            "scope": scope.to_dict(),
+            "subject": {
+                "kind": "question",
+                "id": str(finding["id"]),
+                "label": str(finding["id"]),
+            },
+            "relation": "answered_by_source",
+            "object": {"kind": "literal", "value": str(finding["value"])},
+            "statement": str(finding["statement"]),
+            "disposition": "assert",
+            "evidence": evidence,
+            "tags": list(finding.get("tags") or []),
+        }
+        if finding.get("unit"):
+            envelope["object"]["unit"] = str(finding["unit"])
+        if source_job_id:
+            envelope["source_job_id"] = source_job_id
+        rows.append(KnowledgeCandidate.parse(envelope))
+    return tuple(rows)
 
 
 def reduce_candidates(
@@ -358,6 +406,32 @@ class SourcePacketKnowledgeIngestor:
         return self._record(
             candidates_from_mission_plan(plan, scope, source_job_id=source_job_id)
         )
+
+    def ingest_simple_plan(
+        self,
+        plan: dict,
+        scope: KnowledgeScope,
+        *,
+        source_job_id: str | None = None,
+    ) -> KnowledgeIngestResult:
+        return self._record(
+            candidates_from_simple_plan(plan, scope, source_job_id=source_job_id)
+        )
+
+    def ingest_reduction(
+        self,
+        reduction: object,
+        scope: KnowledgeScope,
+        *,
+        runs_dir,
+        source_job_id: str,
+    ) -> KnowledgeIngestResult:
+        return self._record(candidates_from_reduction(
+            reduction,
+            scope,
+            runs_dir=runs_dir,
+            source_job_id=source_job_id,
+        ))
 
     def ingest_change_analysis(
         self,

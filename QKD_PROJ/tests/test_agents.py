@@ -58,6 +58,15 @@ def test_roles_cover_the_whole_loop(agents):
     )
 
 
+def test_historical_stages_fold_into_three_user_facing_agents(agents):
+    teams = {schema.team_for_agent(agent.name) for agent in agents}
+    assert teams == set(schema.TEAM_ORDER)
+    assert schema.team_for_agent("mission-architect") == "lead"
+    assert schema.team_for_agent("gate-architect") == "lead"
+    assert schema.team_for_agent("firmware-builder") == "builder"
+    assert schema.team_for_agent("reporter") == "verifier"
+
+
 def test_definitions_pass_the_registry_check(agents):
     assert export.check(agents) == []
 

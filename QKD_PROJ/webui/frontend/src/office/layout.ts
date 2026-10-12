@@ -6,7 +6,7 @@
  * the crop/seat geometry used by both the renderer and its parity tests.
  */
 
-import { ASSET_BASE, FLOOR_TILE_SIZE, floorUrl } from './sprites'
+import { ASSET_BASE, CHAR_FRAME_H, FLOOR_TILE_SIZE, floorUrl, type Direction } from './sprites'
 
 export const DEFAULT_LAYOUT_URL = `${ASSET_BASE}/assets/default-layout-1.json`
 export const VOID_TILE = 255
@@ -40,6 +40,8 @@ export interface OfficeSeat {
   y: number
   row: number
   column: number
+  agent?: string
+  facing?: Direction
 }
 
 type FurnitureAsset = { folder: string; file: string }
@@ -155,27 +157,34 @@ export function layoutBounds(layout: OfficeLayout): LayoutBounds {
 }
 
 /**
- * Six deterministic work positions in the default room.
- *
- * The first pair is behind the two front desks.  The other four correspond
- * to the side-chair/PC pairs.  Positions are cropped into renderer-local
- * coordinates but retain a stable row/column identity for replay parity.
+ * Seats use the upstream tile-centre foot anchor, not a standing sprite placed
+ * in front of the furniture. Wooden chairs have one background tile: their
+ * seat is the next row. The cushions face the adjacent desks (up).
  */
 export function defaultOfficeSeats(bounds: LayoutBounds): OfficeSeat[] {
   const coordinates = [
-    [3, 12],
-    [7, 12],
-    [3, 16],
-    [7, 16],
-    [3, 18],
-    [7, 18],
+    { agent: 'builder', column: 3, row: 14, facing: 'up' as const },
+    { agent: 'lead', column: 7, row: 14, facing: 'up' as const },
+    { agent: 'verifier', column: 7, row: 19, facing: 'left' as const },
   ]
-  return coordinates.map(([column, row]) => ({
+  return coordinates.map(({ agent, column, row, facing }) => ({
+    agent,
     x: (column - bounds.minCol) * FLOOR_TILE_SIZE,
-    y: (row - bounds.minRow) * FLOOR_TILE_SIZE,
+    y: (row - bounds.minRow) * FLOOR_TILE_SIZE + FLOOR_TILE_SIZE / 2 - CHAR_FRAME_H,
     row,
     column,
+    facing,
   }))
+}
+
+/** Pixel Agents' non-back-facing chairs sort at the FIRST row boundary.
+ * Using full sprite height puts a tall chair in front of its occupant.
+ * Other furniture keeps ordinary depth sorting; characters are not an overlay.
+ */
+export function furnitureDepth(item: LayoutFurniture, bounds: LayoutBounds, imageHeight: number): number {
+  const y = (item.row - bounds.minRow) * FLOOR_TILE_SIZE
+  if (item.type === 'SOFA_BACK') return y + imageHeight + 1
+  return y + (/^(CUSHIONED_BENCH|WOODEN_CHAIR_SIDE|SOFA_SIDE|SOFA_FRONT)(:|$)/.test(item.type) ? FLOOR_TILE_SIZE : imageHeight)
 }
 
 export function layoutAssetUrls(layout: OfficeLayout): string[] {

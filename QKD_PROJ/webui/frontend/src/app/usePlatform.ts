@@ -20,6 +20,7 @@ import {
   Api,
   type DaemonStatus,
   type GraphSnapshot,
+  type LedgerEvent,
   type OfficeSnapshot,
   type StateResponse,
 } from '../api/client'
@@ -43,6 +44,8 @@ export interface Platform {
   graph: GraphSnapshot | null
   /** Who is at a desk *now*. A different question from the graph's agents. */
   office: OfficeSnapshot | null
+  /** Recent durable rows delivered by the live socket, for the activity feed. */
+  liveEvents: LedgerEvent[]
   error: string | null
   refresh: () => void
 }
@@ -61,6 +64,7 @@ export function usePlatform(token: string | null): Platform {
   const [state, setState] = useState<StateResponse | null>(null)
   const [graph, setGraph] = useState<GraphSnapshot | null>(null)
   const [office, setOffice] = useState<OfficeSnapshot | null>(null)
+  const [liveEvents, setLiveEvents] = useState<LedgerEvent[]>([])
   const [error, setError] = useState<string | null>(null)
 
   // The graph is fetched on a notice, and notices can arrive faster than a
@@ -139,6 +143,18 @@ export function usePlatform(token: string | null): Platform {
           case 'office.changed':
             void readOffice()
             break
+          case 'ledger.event': {
+            const event = frame.event as LedgerEvent | undefined
+            if (event && typeof event.event_id === 'number' && typeof event.job_id === 'string') {
+              setLiveEvents((previous) => {
+                if (previous.some((row) => row.event_id === event.event_id)) return previous
+                // This is a UI convenience cache, not a second ledger.  The
+                // full history remains the transcript endpoint.
+                return [...previous, event].slice(-600)
+              })
+            }
+            break
+          }
           default:
             break
         }
@@ -154,6 +170,9 @@ export function usePlatform(token: string | null): Platform {
           dropped: c.dropped + dropped,
           detail: `fell behind at cursor ${cursor}; re-reading`,
         }))
+        // No activity after a declared gap may be presented as consecutive
+        // with what came before it.  The resumed replay will fill this again.
+        setLiveEvents([])
         void (async () => {
           const applied = await readState()
           await readGraph()
@@ -178,5 +197,5 @@ export function usePlatform(token: string | null): Platform {
     }
   }, [api, readState, readGraph, readOffice])
 
-  return { api, connection, state, graph, office, error, refresh }
+  return { api, connection, state, graph, office, liveEvents, error, refresh }
 }

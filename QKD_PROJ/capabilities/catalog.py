@@ -101,9 +101,17 @@ class CapabilityCatalog:
     source: Path
     capabilities: tuple[Capability, ...]
     digest: str
+    withheld: tuple[tuple[str, str], ...] = ()
 
     @classmethod
-    def load(cls, source: Path, *, project_root: Path) -> "CapabilityCatalog":
+    def load(
+        cls, source: Path, *, project_root: Path, allow_partial: bool = False,
+    ) -> "CapabilityCatalog":
+        """Keep strict validation by default; advisory callers may quarantine rows.
+
+        Withheld rows are never selectable. Catalog-wide schema and identity
+        errors still reject the entire manifest, even in partial mode.
+        """
         root = Path(project_root).resolve()
         source = Path(source).resolve()
         if not source.is_file():
@@ -119,20 +127,33 @@ class CapabilityCatalog:
         raw = data.get("capabilities")
         if not isinstance(raw, list) or not raw:
             raise CapabilityCatalogError("capability catalog needs at least one capability")
-        capabilities = tuple(cls._capability(root, item) for item in raw)
-        identifiers = [item.capability_id for item in capabilities]
+        identifiers = [item.get("id") if isinstance(item, dict) else None for item in raw]
+        if any(not isinstance(identifier, str) or not _ID.fullmatch(identifier)
+               for identifier in identifiers):
+            raise CapabilityCatalogError("capability id must be a lowercase identifier")
         if len(identifiers) != len(set(identifiers)):
             raise CapabilityCatalogError("capability ids must be unique")
+        admitted: list[Capability] = []
+        withheld: list[tuple[str, str]] = []
+        for identifier, item in zip(identifiers, raw):
+            try:
+                admitted.append(cls._capability(root, item))
+            except (CapabilityCatalogError, OSError) as exc:
+                if not allow_partial:
+                    raise
+                withheld.append((identifier, str(exc)))
+        capabilities = tuple(admitted)
         payload = [item.describe() for item in capabilities]
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        return cls(root, source, capabilities, digest)
+        return cls(root, source, capabilities, digest, tuple(withheld))
 
     @classmethod
-    def load_default(cls, project_root: Path) -> "CapabilityCatalog":
+    def load_default(cls, project_root: Path, *, allow_partial: bool = False) -> "CapabilityCatalog":
         root = Path(project_root).resolve()
-        return cls.load(root / "QKD_PROJ" / "capabilities" / "verified-assets.yaml", project_root=root)
+        return cls.load(root / "QKD_PROJ" / "capabilities" / "verified-assets.yaml",
+                        project_root=root, allow_partial=allow_partial)
 
     @staticmethod
     def _capability(root: Path, raw: Any) -> Capability:
@@ -171,7 +192,7 @@ class CapabilityCatalog:
             except (OSError, json.JSONDecodeError) as exc:
                 raise CapabilityCatalogError(f"capability {identifier} run manifest is unreadable: {run}") from exc
             contract = manifest.get("contract", {}) if isinstance(manifest, dict) else {}
-            if manifest.get("verdict") != "PASS" or not isinstance(contract, dict) or contract.get("test_spec") not in names_set:
+            if not isinstance(manifest, dict) or manifest.get("verdict") != "PASS" or not isinstance(contract, dict) or contract.get("test_spec") not in names_set:
                 raise CapabilityCatalogError(
                     f"capability {identifier} run {run} is not a PASS record for one of its contracts"
                 )

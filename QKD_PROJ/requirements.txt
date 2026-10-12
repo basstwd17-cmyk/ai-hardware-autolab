@@ -2,6 +2,8 @@ PyYAML>=6.0
 pytest>=8.0
 # Live BBB access only (hwtools/ssh.py). Every offline test runs without it.
 paramiko>=3.0
+# Passive serial enumeration and bounded I/O for registered boards.
+pyserial>=3.5
 
 # Discovery loop document ingestion. PDF text is a search aid; the original
 # bytes and page identity remain the evidence.

@@ -1,122 +1,139 @@
 /**
  * Ask the preflight, then open one durable mission.
  *
- * A reviewed contract is carried in as the baseline; a contract gap is
- * carried in as an explicit unknown. Both go through the same first planning
- * agent so improvements and repairs cannot silently skip source refresh.
- *
- * **`contract_gap` is not styled as a failure.** It is the deterministic
- * answer "no reviewed contract covers this yet", and the button under it
- * starts a job that goes and finds out. Red text there would tell an operator
- * the platform is broken when it has just told them something true.
+ * Every request opens the same Lead → Builder → Verifier conversation. In
+ * Hardware mode the daemon binds its installed board profile.
  *
  * **A click is not a result.** The button reports what the daemon answered —
  * `command.result` — and the job appears in the other panels because the
  * ledger says it exists, not because this page thinks it started one.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  actionFor,
   scenarioWithScope,
-  toneFor,
-  type Action,
   type ExecutionScope,
-  type Preflight,
   type SearchPolicy,
 } from '../discovery'
 import type { Platform } from '../usePlatform'
+import { ProjectPicker, PROJECT_STORAGE_KEY } from '../ProjectPicker'
+import { ModelPicker } from '../ModelPicker'
+import { useModelSelection } from '../useModelSelection'
+import { withModelSelection } from '../modelSelection'
+import { HardwareConnections } from '../HardwareConnections'
+import { HardwareSetups } from '../HardwareSetups'
+import { HARDWARE_STORAGE_KEY, hardwareKey, parseHardwareSelection, withHardwareSelection, type HardwareSelection } from '../hardwareSelection'
 
 export function StartView({ platform }: { platform: Platform }) {
+  const models = useModelSelection()
+  const [project, setProject] = useState<string | undefined>(() => {
+    try { return localStorage.getItem(PROJECT_STORAGE_KEY) || undefined } catch { return undefined }
+  })
+  const [projectSaveError, setProjectSaveError] = useState('')
+  const scopeChosen = useRef(false)
+  const changeProject = (id?: string) => {
+    setProject(id)
+    if (id) { setScope('offline'); scopeChosen.current = true }
+    try {
+      if (id) localStorage.setItem(PROJECT_STORAGE_KEY, id)
+      else localStorage.removeItem(PROJECT_STORAGE_KEY)
+      setProjectSaveError('')
+    } catch { setProjectSaveError('프로젝트 선택은 적용됐지만 브라우저에 저장하지 못했습니다.') }
+  }
+  const [hardware, setHardware] = useState<HardwareSelection | undefined>(() => {
+    try { return parseHardwareSelection(localStorage.getItem(HARDWARE_STORAGE_KEY)) } catch { return undefined }
+  })
+  const [hardwareSaveError, setHardwareSaveError] = useState('')
+  const changeHardware = (value?: HardwareSelection) => {
+    setHardware(value)
+    try {
+      if (value) localStorage.setItem(HARDWARE_STORAGE_KEY, JSON.stringify(value))
+      else localStorage.removeItem(HARDWARE_STORAGE_KEY)
+      setHardwareSaveError('')
+    } catch { setHardwareSaveError('이 브라우저에 선택을 저장하지 못했습니다. 이번 작업의 선택은 적용됩니다.') }
+  }
   const [scenario, setScenario] = useState('')
-  const [scope, setScope] = useState<ExecutionScope>('offline')
+  const [scope, setScope] = useState<ExecutionScope>(() => project || platform.connection?.daemon?.profile === 'offline' ? 'offline' : 'hardware')
+  useEffect(() => {
+    if (!scopeChosen.current && platform.connection?.daemon?.profile === 'offline') setScope('offline')
+  }, [platform.connection?.daemon?.profile])
   const [searchPolicy, setSearchPolicy] = useState<SearchPolicy>('refresh')
-  const [preflight, setPreflight] = useState<Preflight | null>(null)
-  const [busy, setBusy] = useState<'preflight' | 'send' | null>(null)
+  const [busy, setBusy] = useState<'send' | null>(null)
   const [answer, setAnswer] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [commandId] = useState(() => `webui-${Math.random().toString(36).slice(2, 10)}`)
+  const submitting = useRef(false)
 
-  const action = actionFor(
-    preflight,
-    `${commandId}-${preflight?.status ?? 'none'}`,
-    searchPolicy,
-  )
-
-  const runPreflight = async () => {
-    if (!platform.api || !scenario.trim()) return
-    setBusy('preflight')
+  const start = async () => {
+    if (!platform.api || !scenario.trim() || submitting.current) return
+    submitting.current = true
+    setBusy('send')
     setFailed(null)
     setAnswer(null)
     try {
-      const result = await platform.api.command({
-        type: 'scenario.preflight',
-        commandId: `${commandId}-preflight`,
-        scenario: scenarioWithScope(scenario, scope),
-      })
-      setPreflight((result.preflight as Preflight) ?? null)
-      if (!result.ok) setFailed(String(result.error ?? 'the daemon refused the preflight'))
-    } catch (exc) {
-      setFailed(String(exc))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const send = async () => {
-    if (!platform.api || action.kind === 'none') return
-    setBusy('send')
-    setFailed(null)
-    try {
-      const result = await platform.api.command(action.frame)
-      // What the daemon said, not what this page hoped.
-      setAnswer(
-        result.ok
-          ? `accepted: ${JSON.stringify(result.job ?? result, null, 2)}`
-          : `refused: ${String(result.error ?? 'no reason given')}`,
-      )
+      const scoped = scenarioWithScope(scenario, scope)
+      const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(scoped))
+      const digest = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('')
+      const result = await platform.api.command(withHardwareSelection(withModelSelection({
+        type: 'job.mission', commandId: `${commandId}-start-${Date.now()}`,
+        objective: scenario.trim(), scenario: scoped, scenarioSha256: digest, searchPolicy,
+        ...(project ? {projectId:project} : {}),
+      }, models.selection), scope === 'hardware' ? hardware : undefined))
+      if (!result.ok) throw new Error(String(result.error ?? '작업 시작에 실패했습니다.'))
+      const job = result.job as { job_id?: string } | undefined
+      setAnswer(`작업을 접수했습니다: ${job?.job_id ?? ''}\nAgents 탭에서 진행 상황과 결과를 확인하세요.`)
       platform.refresh()
     } catch (exc) {
       setFailed(String(exc))
     } finally {
+      submitting.current = false
       setBusy(null)
     }
   }
 
   return (
     <div className="pad start">
-      <h2>Start something</h2>
+      <h2>무엇을 만들까요?</h2>
       <p className="muted">
-        The preflight finds a reviewed baseline when one exists. Every accepted scenario then
-        enters mission planning, source refresh, change analysis and contract review.
+        시나리오를 입력하면 Lead가 방향을 정하고, Builder가 구현하고, Verifier가 결과를 검토합니다.
+        부족한 부분은 다시 전달해 수정합니다.
+      </p>
+      <p className="muted" role="note">
+        {scope === 'offline'
+          ? '격리된 작업공간에서 개발하고 검증합니다. Offline에서는 장비에 접근하지 않습니다.'
+          : 'Builder의 장비 요청은 플랫폼이 연결·권한·안전 설정을 확인한 뒤 실행합니다. 정보가 부족하면 같은 작업에서 질문하고 답변 후 이어갑니다.'}
       </p>
 
+      <ProjectPicker api={platform.api} selected={project} onChange={changeProject} disabled={busy !== null} />
+      {projectSaveError && <p className="error">{projectSaveError}</p>}
       <label className="scope-field">
-        <span>Execution scope</span>
+        <span>실행 모드</span>
         <select
           value={scope}
           onChange={(event) => {
+            scopeChosen.current = true
             setScope(event.target.value as ExecutionScope)
-            setPreflight(null)
             setAnswer(null)
           }}
         >
-          <option value="offline">Offline — hardware access forbidden</option>
-          <option value="hardware">Hardware — approval still required</option>
+          <option value="hardware">Hardware — 시나리오에 요청한 장비 제어 허용</option>
+          <option value="offline">일반 개발 — 소스·문서·실행·검증 (장비 사용 안 함)</option>
         </select>
       </label>
       <p className="muted scope-note">
-        The selected boundary becomes part of the signed scenario text. Hardware mode does not
-        grant approval; it only allows preflight to route the request honestly.
+        {scope === 'hardware' ? 'Hardware 작업을 시작하면 시나리오에 요청한 보드·스코프 제어를 이 job에 위임합니다. 선택한 구성에서 제공하는 연결 확인·통신·업로드·측정 도구를 자동 실행합니다.' : '선택한 프로젝트의 소스와 문서를 읽고 구현·실행·검증합니다. 모델은 그대로 사용하며 보드 등록은 필요 없습니다.'}
       </p>
+      {scope === 'hardware' && <HardwareSetups api={platform.api} selection={hardware} onChange={changeHardware} disabled={busy !== null} />}
+      {hardwareSaveError && <p className="error">{hardwareSaveError}</p>}
+      {scope === 'hardware' && <HardwareConnections key={hardwareKey(hardware)} api={platform.api} selection={hardware} />}
 
       <label className="scope-field">
         <span>Research policy</span>
         <select
+          disabled
           value={searchPolicy}
           onChange={(event) => {
             setSearchPolicy(event.target.value as SearchPolicy)
-            setPreflight(null)
             setAnswer(null)
           }}
         >
@@ -125,124 +142,30 @@ export function StartView({ platform }: { platform: Platform }) {
         </select>
       </label>
       <p className="muted scope-note">
-        The mission architect selects materials and agents; this policy is preserved in its durable plan.
+        로컬 코드·문서·저장된 지식을 활용하고, 필요한 제조사 자료는 웹 검색으로 조사합니다.
       </p>
+
+      <ModelPicker api={platform.api} selection={models.selection} onChange={models.change}
+        saveError={models.saveError} disabled={busy !== null} />
 
       <textarea
         className="scenario"
         rows={4}
-        placeholder="Describe the scenario, in the words a contract would be written against."
+        placeholder="원하는 기능과 확인할 결과를 편하게 적어주세요. 참고할 코드·자료가 있으면 함께 알려주세요."
         value={scenario}
         onChange={(event) => {
           setScenario(event.target.value)
-          setPreflight(null)
           setAnswer(null)
         }}
       />
       <div className="row">
-        <button className="chip" onClick={runPreflight} disabled={busy !== null || !scenario.trim()}>
-          {busy === 'preflight' ? 'asking…' : 'Run preflight'}
+        <button className="chip" onClick={start} disabled={busy !== null || !scenario.trim() || !platform.api}>
+          {busy === 'send' ? '시작 중…' : '작업 시작'}
         </button>
       </div>
 
       {failed && <p className="error">{failed}</p>}
-      {preflight && <PreflightPanel preflight={preflight} action={action} onSend={send} busy={busy} />}
       {answer && <pre className="answer">{answer}</pre>}
-    </div>
-  )
-}
-
-function PreflightPanel({
-  preflight,
-  action,
-  onSend,
-  busy,
-}: {
-  preflight: Preflight
-  action: Action
-  onSend: () => void
-  busy: 'preflight' | 'send' | null
-}) {
-  const tone = toneFor(preflight.status)
-
-  return (
-    <section className={`preflight ${tone}`}>
-      <div className="preflight-head">
-        <span className={`pill ${tone}`}>{preflight.status}</span>
-        {preflight.reason_code && <span className="muted mono">{preflight.reason_code}</span>}
-      </div>
-      {preflight.detail && <p>{preflight.detail}</p>}
-
-      {preflight.status === 'contract_gap' && (
-        <p className="muted">
-          {preflight.reason_code === 'ambiguous_contract'
-            ? 'This is not a failure: the matching contracts will be compared as parents and the mission will derive one scenario-specific contract automatically.'
-            : 'This is not a failure: the mission will research the gap and derive a scenario-specific contract automatically.'}
-        </p>
-      )}
-
-      <dl className="meta">
-        {preflight.selected_contract?.name && (
-          <Row label="contract" value={preflight.selected_contract.name} />
-        )}
-        {preflight.execution_mode && <Row label="mode" value={preflight.execution_mode} />}
-        {preflight.approval_required !== undefined && (
-          <Row label="approval" value={String(preflight.approval_required)} />
-        )}
-        {preflight.scenario_sha256 && (
-          <Row label="scenario sha256" value={preflight.scenario_sha256} />
-        )}
-      </dl>
-
-      {(preflight.candidates?.length ?? 0) > 0 && (
-        <details>
-          <summary className="muted">
-            {preflight.candidates?.length} contract(s) were considered
-          </summary>
-          <dl className="meta">
-            {preflight.candidates?.map((candidate) => (
-              <Row
-                key={candidate.name}
-                label={candidate.name ?? '?'}
-                value={`${candidate.status ?? ''} · ${candidate.score ?? ''}`}
-              />
-            ))}
-          </dl>
-        </details>
-      )}
-
-      <div className="row">
-        {action.kind === 'none' ? (
-          <span className="muted">{action.why}</span>
-        ) : (
-          <>
-            <button
-              className={`chip ${action.kind}`}
-              onClick={onSend}
-              disabled={busy !== null}
-              title={action.why}
-            >
-              {busy === 'send' ? 'sending…' : action.label}
-            </button>
-            <span className="muted">{action.why}</span>
-          </>
-        )}
-      </div>
-      {action.kind !== 'none' && (
-        <details>
-          <summary className="muted">the frame this will send</summary>
-          <pre>{JSON.stringify(action.frame, null, 2)}</pre>
-        </details>
-      )}
-    </section>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd title={value}>{value}</dd>
     </div>
   )
 }

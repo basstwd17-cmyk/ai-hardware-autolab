@@ -1,4 +1,9 @@
-# Discovery reference boundary
+# Research reference boundary — current and legacy paths
+
+New web scenarios use `orchestrator/simple_mission.py` and
+`agents/simple/lead-agent.md`, not the multi-agent discovery chain described
+in the compatibility section below. Lead returns Plan + research_findings;
+Builder and Verifier follow. Read the project README/STATUS first.
 
 This package is the first layer of the scenario-to-architecture discovery
 loop. A Codex `researcher` may use the CLI-owned native web-search tool to
@@ -45,9 +50,9 @@ complete searchable document.
 
 The installed Codex CLI owns login and native search. The App Server spike on
 2026-08-27 observed completed `webSearch` items carrying the query, action and
-result URLs. Only the `researcher` role is launched with
-`web_search="live"`; every other role is explicitly launched with
-`web_search="disabled"`.
+result URLs. New missions enable search for `lead-agent` through its
+`native_web` definition; legacy discovery enables it for `researcher`.
+Builder and Verifier have native web search disabled.
 
 Fetching selected bytes still belongs behind a provider interface rather than
 in the store:
@@ -101,7 +106,7 @@ pages may be searched and opened by Codex, but are not yet admitted into the
 durable evidence store; a claim that exists only in HTML therefore remains an
 open question for now.
 
-## Durable objects
+## Legacy discovery compatibility (not the new mission execution order)
 
 The package now defines and validates:
 
@@ -131,8 +136,8 @@ with `qkd-daemon discover`; each daemon tick performs at most one agent turn:
 ResearchPlan → SourcePacket → ArchitectureDecision → ContractDraft → ContractReview
 ```
 
-The common `job.mission` front door accepts both a reviewed baseline and a
-contract gap. It never skips the first planning pass:
+Before the three-agent migration, the `job.mission` front door used this
+sequence. It is retained for historical job compatibility, not new scenarios:
 
 ```text
 MissionPlan → SourcePacket → ChangeAnalysis → ArchitectureDecision → ContractDraft → ContractReview
@@ -148,7 +153,7 @@ second document database. SQLite schema version 4 admits mission and change
 handoffs as well as discovery; opening a version 1, 2 or 3 ledger migrates the handoff constraint and
 preserves its rows in one transaction.
 
-## Verification performed
+## Historical verification snapshot (2026-08-27; not current test totals)
 
 - 86 targeted tests pass (one platform-specific test skipped) across agent
   definitions, App Server command construction, native-search bridging,
@@ -161,7 +166,7 @@ preserves its rows in one transaction.
 - Its public manifest contains no acquisition locator.
 - A parser worker has a hard timeout and cannot block the long-lived daemon.
 
-## Conversation entry point
+## Conversation routing design note (not a claim that every route is implemented)
 
 The web application's single text box should not send every sentence to
 the mutation loop. It should produce one closed routing decision:

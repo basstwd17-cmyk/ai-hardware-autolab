@@ -60,7 +60,7 @@ capabilities:
     runs: [20260814T044448Z_scope_selftest_n200_2]
     assets:
       - path: QKD_PROJ/hwtools/scope.py
-        sha256: d21fffd3aa36198ab9ee84f822ae4cfec1075801d9869683abc0f3ebf6d8209e
+        sha256: c078f85a0a6c19fc6ffc0aed668afd96a483c200a49a105397cb8863ecf630b6
 
   - id: cpld-build-and-program
     title: CPLD build and volatile SRAM program tooling

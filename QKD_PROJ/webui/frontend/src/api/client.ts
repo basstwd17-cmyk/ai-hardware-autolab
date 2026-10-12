@@ -118,11 +118,12 @@ export class Api {
    * answer rather than a failure -- the daemon decided, and the reason it gave
    * is the thing worth showing.
    */
-  async command(frame: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async command(frame: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     const answer = await fetch(`${this.base}/api/command`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(frame),
+      signal,
     })
     if (answer.status === 409 || answer.ok) {
       return (await answer.json()) as Record<string, unknown>

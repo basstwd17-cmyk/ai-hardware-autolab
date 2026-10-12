@@ -75,11 +75,22 @@ export interface FeedStep {
   at: string
 }
 
+/** One short, operator-facing sentence for the live activity rail. */
+export interface LiveNote {
+  eventId: number
+  at: string
+  agent: string
+  text: string
+  current: boolean
+  source: 'message' | 'activity'
+}
+
 const HANDOFF = 'handoff.'
 const RUNTIME = 'runtime.'
 
 /** The agent a row belongs to; `human` for rows a person caused. */
 function actorOf(event: LedgerEvent): string {
+  if (event.kind === 'control.steer' || event.kind === 'conversation.feedback') return 'human'
   if (event.agent && event.agent.trim()) return event.agent.trim()
   if (event.kind === 'job.created') return 'human'
   return 'platform'
@@ -109,7 +120,9 @@ export function toTurns(events: LedgerEvent[]): Turn[] {
     }
     turn.entries.push(entry)
 
-    if (event.kind.startsWith(HANDOFF)) {
+    if (event.kind === 'conversation.turn.completed') {
+      turn.closedBy = { kind: 'Conversation', sha256: '', stepId: '' }
+    } else if (event.kind.startsWith(HANDOFF)) {
       const payload = event.payload as { sha256?: unknown; step_id?: unknown }
       turn.closedBy = {
         kind: event.kind.slice(HANDOFF.length),
@@ -129,7 +142,8 @@ export function toTurns(events: LedgerEvent[]): Turn[] {
 export function toFeedSteps(turns: Turn[]): FeedStep[] {
   return turns.map((turn) => {
     const visible = turn.entries.filter((entry) => entry.kind !== 'marker')
-    const narrative = visible.find((entry) => (
+    const marker = turn.entries.filter((entry) => entry.kind === 'marker').at(-1)
+    const narrative = [...visible].reverse().find((entry) => (
       (entry.kind === 'message' || entry.kind === 'reasoning' || entry.kind === 'brief') && entry.body
     ))
     const commands = visible.filter((entry) => entry.kind === 'command')
@@ -147,18 +161,190 @@ export function toFeedSteps(turns: Turn[]): FeedStep[] {
         ? '시나리오 등록'
         : visible.length
           ? '진행 중'
-          : '기록 대기'
+          : marker
+            ? markerLabel(marker.title)
+            : '기록 없음'
     return {
       agent: turn.agent,
       iteration: turn.iteration,
       entries: turn.entries,
       closedBy: turn.closedBy,
       title,
-      summary: narrative?.body ?? summaryFromActivities(visible),
+      summary: (narrative?.body ?? summaryFromActivities(visible)) || markerSummary(marker),
       chips,
       at: turn.entries[0]?.at ?? '',
     }
   })
+}
+
+function markerLabel(kind: string): string {
+  return ({
+    'job.done': '작업 종료 기록',
+    'job.blocked': '작업 중단 기록',
+    'job.running': '작업 재개 기록',
+    'iteration.started': '반복 시작 기록',
+  } as Record<string, string>)[kind] ?? kind
+}
+
+function markerSummary(marker: Entry | undefined): string {
+  if (!marker) return ''
+  const facts = new Map(marker.facts)
+  const outcome = facts.get('outcome')
+  const reason = facts.get('reason')
+  if (outcome && reason) return `${outcome} — ${reason}`
+  return outcome ?? reason ?? ''
+}
+
+/**
+ * The durable transcript is intentionally complete and verbose.  This is its
+ * complementary view: a small messenger-like explanation of the latest
+ * actions.  It only translates observed event kinds; it never invents a
+ * conclusion about the job or hides the raw events available below.
+ */
+export function toLiveNotes(events: LedgerEvent[]): LiveNote[] {
+  const notes: LiveNote[] = []
+  const pending = new Map<string, LiveNote>()
+  for (const event of mergeConversationRows(events, [])) {
+    const payload = event.payload as { method?: string; params?: { threadId?: string; item?: { id?: string; type?: string } }; item_type?: string }
+    const method = payload.method ?? event.kind.replace(/^runtime\./, '')
+    const key = `${event.job_id}:${actorOf(event)}:${payload.params?.threadId ?? ''}:${payload.params?.item?.id ?? payload.item_type ?? payload.params?.item?.type ?? ''}`
+    if (method.endsWith('/completed')) {
+      const previous = pending.get(key)
+      if (previous) previous.current = false
+      pending.delete(key)
+      if (isTruncated(payload.params)) {
+        // A clipped completion loses the item id. Do not leave its start
+        // looking active forever; the raw record still declares the gap.
+        for (const [pendingKey, note] of pending) {
+          if (note.agent === actorOf(event)) { note.current = false; pending.delete(pendingKey) }
+        }
+      }
+    }
+    if (event.kind.startsWith(HANDOFF) || event.kind === 'conversation.turn.completed' || event.kind === 'conversation.turn.failed' || event.kind === 'conversation.device.completed' || event.kind === 'conversation.device.failed' || event.kind === 'runtime.turn/completed' || event.kind === 'job.done' || event.kind === 'job.blocked') {
+      for (const note of notes) if (event.kind.startsWith('job.') || note.agent === actorOf(event)) note.current = false
+    }
+    const text = liveText(event)
+    if (!text) continue
+    const note: LiveNote = {
+      eventId: event.event_id,
+      at: event.at,
+      agent: actorOf(event),
+      text: shortNote(text),
+      current: method === 'item/started' || event.kind === 'conversation.turn.started' || event.kind === 'conversation.device.started',
+      source: event.kind === 'control.steer' || event.kind === 'conversation.feedback' || event.kind === 'conversation.turn.completed' || payload.item_type === 'agentMessage' || payload.params?.item?.type === 'agentMessage' ? 'message' : 'activity',
+    }
+    notes.push(note)
+    if (note.current) pending.set(key, note)
+  }
+  return notes.slice(-8)
+}
+
+/** Replay, websocket tail and tab remount all use the same durable feed. */
+export function mergeConversationRows(history: LedgerEvent[], live: LedgerEvent[], jobId?: string | null): LedgerEvent[] {
+  const rows = new Map<number, LedgerEvent>()
+  for (const event of [...history, ...live]) {
+    if (jobId !== undefined && event.job_id !== jobId) continue
+    if (!rows.has(event.event_id)) rows.set(event.event_id, event)
+  }
+  return [...rows.values()].sort((a, b) => a.event_id - b.event_id)
+}
+
+function liveText(event: LedgerEvent): string {
+  if (event.kind === 'conversation.turn.started') return '전달받은 목표와 결과를 확인하고 작업을 시작합니다.'
+  if (event.kind === 'conversation.turn.completed') return text((event.payload as { reply?: { summary?: unknown } }).reply?.summary)
+  if (event.kind === 'conversation.turn.failed') return `작업 응답을 기록하지 못했습니다: ${text((event.payload as { error?: unknown }).error)}`
+  if (event.kind === 'conversation.feedback') return `피드백: ${text((event.payload as { message?: unknown }).message)}`
+  if (event.kind === 'conversation.device.started') return `장비 호출 중: ${text((event.payload as { tool?: unknown }).tool) || '장비 도구'}`
+  if (event.kind === 'conversation.device.completed') {
+    const payload = event.payload as { tool?: unknown; run?: unknown; run_verdict?: unknown }
+    const verdict = text(payload.run_verdict) || '결과 기록됨'
+    const run = text(payload.run)
+    return `장비 호출 완료: ${text(payload.tool) || '장비 도구'} · ${verdict}${run ? ` · ${run}` : ''}`
+  }
+  if (event.kind === 'conversation.device.failed') return `장비 결과를 확정하지 못했습니다: ${text((event.payload as { error?: unknown }).error)}`
+  if (event.kind === 'plan.preparation.required') return '준비 중 · Builder가 기존 자료로 실행에 필요한 코드와 입력을 준비합니다. 아직 장비에 접근하지 않습니다.'
+  if (event.kind === 'plan.prepared.selected') return 'Builder의 준비 결과를 이어받아 실행 전 검사를 진행합니다.'
+  if (event.kind === 'step.dispatch.started') return '실행 중 · 장비 단계 실행을 시작합니다. 결과는 아직 확인되지 않았습니다.'
+  if (event.kind === 'plan.validation_failed') return '수정 중 · 계획에서 보완할 내용을 확인했습니다.'
+  if (event.kind === 'control.steer') return `피드백 기록: ${text((event.payload as { message?: unknown }).message)}`
+  if (event.kind === 'job.created') return '시나리오를 받아 작업을 시작했습니다.'
+  if (event.kind === 'iteration.started') {
+    const iteration = (event.payload as { iteration?: unknown }).iteration
+    return typeof iteration === 'number' ? `${iteration}번째 반복을 시작했습니다.` : '새 반복을 시작했습니다.'
+  }
+  if (event.kind.startsWith(HANDOFF)) return `${handoffLabel(event.kind.slice(HANDOFF.length))}을 다음 단계에 전달했습니다.`
+  if (event.kind === 'job.done') return '작업 결과를 원장에 기록했습니다.'
+  if (event.kind === 'job.blocked') {
+    const reason = text((event.payload as { reason?: unknown }).reason)
+    return reason.startsWith('user_input:')
+      ? `답변을 기다립니다: ${reason.slice('user_input:'.length).trim()}`
+      : `진행이 멈췄습니다: ${reason || '진행 조건 확인 필요'}`
+  }
+  if (event.kind === 'approval.pending') return '승인 요청을 기록했습니다. 사람의 결정을 기다립니다.'
+  if (event.kind === 'research.progress') {
+    const payload = event.payload as { queries_used?: unknown; new_fact_hashes?: unknown }
+    const queries = typeof payload.queries_used === 'number' ? payload.queries_used : 0
+    const facts = Array.isArray(payload.new_fact_hashes) ? payload.new_fact_hashes.length : 0
+    return `조사 ${queries}회에서 새로운 근거 ${facts}개를 기록했습니다.`
+  }
+  if (!event.kind.startsWith(RUNTIME)) return ''
+
+  const payload = event.payload as { method?: unknown; params?: unknown; item_type?: unknown }
+  const method = text(payload.method) || event.kind.slice(RUNTIME.length)
+  const params = payload.params as { item?: unknown } | undefined
+  const item = params?.item as Record<string, unknown> | undefined
+  const type = text(payload.item_type) || text(item?.type)
+  const started = method.endsWith('/started')
+  const finished = method.endsWith('/completed')
+
+  if (type === 'reasoning') return '' // Internal reasoning is not agent-to-user speech.
+  const query = text((item?.action as { query?: unknown } | undefined)?.query) || text(item?.query)
+  const failed = item?.status === 'failed' || item?.success === false || !!item?.error
+  if (started && type === 'webSearch') return query ? `웹 검색 중: ${query}` : '웹에서 자료를 검색하고 있습니다.'
+  if (started && type === 'dynamicToolCall') {
+    return text(item?.tool) === 'collect_source'
+      ? '찾은 문서를 지식 기록으로 수집하고 있습니다.'
+      : `도구 실행 중: ${text(item?.tool) || '도구 정보 수신 대기'}`
+  }
+  if (started && type === 'commandExecution') return commandNote(item, false)
+  if (started && type === 'fileChange') return '코드 변경을 적용하고 있습니다.'
+  if (started && type === 'mcpToolCall') return `장비·도구 호출 중: ${text(item?.tool) || 'MCP'}`
+  if (!finished) return ''
+
+  if (isTruncated(payload.params)) return `${({ commandExecution: '명령 실행', fileChange: '파일 변경', agentMessage: '에이전트 메시지', dynamicToolCall: '도구 호출', mcpToolCall: 'MCP 호출' } as Record<string, string>)[type] ?? '활동'} 종료 이벤트를 받았습니다. 기록이 잘려 상세 결과는 확인할 수 없습니다.`
+  if (type === 'webSearch') return failed ? '웹 검색이 실패했습니다.' : `웹 검색을 마쳤습니다${query ? `: ${query}` : '.'}`
+  if (type === 'dynamicToolCall') {
+    if (failed) return `도구 실행이 실패했습니다: ${text(item?.tool) || '자료 수집'}`
+    return `도구 실행을 마쳤습니다: ${text(item?.tool) || '조사 도구'}`
+  }
+  if (type === 'commandExecution') return commandNote(item, true)
+  if (type === 'fileChange') return failed ? '코드 변경 적용이 실패했습니다.' : `파일 변경 결과를 받았습니다${Array.isArray(item?.changes) ? `: ${item.changes.length}개 파일` : '.'}`
+  if (type === 'mcpToolCall') return `도구 ${text(item?.tool) || 'MCP'}: ${failed ? '실패' : '응답 수신'}`
+  if (type === 'agentMessage') {
+    const value = text(item?.text).trim()
+    return /^[{[]/.test(value) ? '구조화된 응답을 작성했습니다. 본문은 아래 상세 기록에서 확인할 수 있습니다.' : value
+  }
+  return ''
+}
+
+function shortNote(value: string): string {
+  const flat = value.replace(/\s+/g, ' ').trim()
+  return flat.length > 240 ? `${flat.slice(0, 239)}…` : flat
+}
+
+function commandNote(item: Record<string, unknown> | undefined, finished: boolean): string {
+  const command = text(item?.command)
+  const label = /\b(pytest|vitest)\b|npm(?:\.cmd)? (?:run )?test/i.test(command) ? '테스트 명령'
+    : /\b(cmake|make|msbuild)\b|npm(?:\.cmd)? run build/i.test(command) ? '빌드 명령'
+      : /\b(rg|Select-String)\b/i.test(command) ? '파일 검색 명령'
+        : /\b(Get-Content|cat|type)\b/i.test(command) ? '파일 읽기 명령' : '명령'
+  const leaf = command.match(/(?:[\w.-]+\.(?:py|md|ts|tsx|c|cpp|h|v|sv|yaml|json|pdf))\b/i)?.[0]
+  const target = leaf ? ` · ${leaf}` : ''
+  if (!finished) return `${label} 실행 중${target}`
+  const code = item?.exitCode
+  if (typeof code === 'number' && code !== 0) return `${label} 실패 (종료 코드 ${code})${target}`
+  if (item?.status === 'declined' || item?.status === 'failed') return `${label}: ${item.status === 'declined' ? '실행 거부' : '실패'}${target}`
+  return `${label} 종료${code === 0 ? ' (종료 코드 0)' : ' (성공 여부 미확인)'}${target}`
 }
 
 function toEntry(event: LedgerEvent): Entry | null {
@@ -167,6 +353,10 @@ function toEntry(event: LedgerEvent): Entry | null {
     at: event.at,
     facts: [] as Array<[string, string]>,
     truncated: false,
+  }
+
+  if (['conversation.turn.started', 'conversation.turn.completed', 'conversation.turn.failed', 'conversation.feedback', 'conversation.device.started', 'conversation.device.completed', 'conversation.device.failed'].includes(event.kind)) {
+    return { ...base, kind: 'message', title: event.kind === 'conversation.turn.completed' ? '작업 전달' : '진행 메시지', body: liveText(event) }
   }
 
   if (event.kind === 'job.created') {
@@ -208,6 +398,10 @@ function toEntry(event: LedgerEvent): Entry | null {
     }
   }
 
+  if (['plan.preparation.required', 'plan.prepared.selected', 'plan.validation_failed', 'step.dispatch.started'].includes(event.kind)) {
+    return { ...base, kind: 'marker', title: liveText(event), body: text((event.payload as { reason?: unknown; error?: unknown }).reason ?? (event.payload as { error?: unknown }).error) }
+  }
+
   if (event.kind.startsWith('campaign.')) {
     const payload = event.payload as Record<string, unknown>
     return {
@@ -218,6 +412,34 @@ function toEntry(event: LedgerEvent): Entry | null {
       facts: Object.entries(payload)
         .filter(([key]) => key !== 'reason')
         .map(([key, value]) => [key, text(value)] as [string, string]),
+    }
+  }
+
+  if (event.kind === 'control.steer') {
+    const payload = event.payload as { message?: unknown; by?: unknown }
+    return {
+      ...base,
+      kind: 'message',
+      title: '진행 방향 피드백',
+      body: text(payload.message),
+      facts: text(payload.by) ? [['보낸 사람', text(payload.by)]] : [],
+    }
+  }
+
+  if (event.kind === 'research.progress') {
+    const payload = event.payload as Record<string, unknown>
+    const tokens = payload.tokens as Record<string, unknown> | undefined
+    return {
+      ...base,
+      kind: 'reasoning',
+      title: '조사 진행 기록',
+      body: `${text(payload.queries_used) || '0'}회 검색 · ${Array.isArray(payload.new_fact_hashes) ? payload.new_fact_hashes.length : 0}개 근거`,
+      facts: [
+        ['누적 제한 전 사용', text(payload.queries_used)],
+        ['입력 토큰', text(tokens?.input)],
+        ['출력 토큰', text(tokens?.output)],
+        ['경과 시간(초)', text(payload.elapsed_s)],
+      ].filter(([, value]) => value) as Array<[string, string]>,
     }
   }
 
@@ -400,6 +622,7 @@ function handoffLabel(kind: string): string {
     ChangeAnalysis: '차이 분석 완료', ArchitectureDecision: '구조 결정 완료',
     ContractDraft: '계약 초안 완료', ContractReview: '계약 검토 완료',
     StepResult: '실행 결과 전달', Verdict: '판정 완료', Report: '보고 완료',
+    Conversation: '작업 전달',
   } as Record<string, string>)[kind] ?? `${kind} 전달`
 }
 

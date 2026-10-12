@@ -344,7 +344,13 @@ class BoardCatalog:
         return matched[0] if matched else None
 
     def planning_context(self, scenario: str) -> dict[str, Any]:
-        selected = self.match(scenario)
+        normalized = _normalized(scenario)
+        matches = [p for p in self.profiles if any(_normalized(alias) in normalized for alias in p.aliases)]
+        if len(matches) > 1:
+            return {"status": "multiple", "selected": None,
+                    "candidates": [p.describe() for p in matches],
+                    "detail": "Lead chooses the requested devices; several boards may participate in one job."}
+        selected = matches[0] if matches else None
         if selected is not None:
             return {"status": "profiled", "selected": selected.describe()}
         return {

@@ -23,6 +23,8 @@ from typing import Any, Iterable, Sequence
 
 import yaml
 
+from QKD_PROJ.orchestrator.mission_contract import MissionContract
+
 from QKD_PROJ.agents.schema import AgentDefinition, load_all
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[1] / "contracts"
@@ -263,6 +265,7 @@ class ScenarioPreflight:
         artifacts = self._artifacts(selected.contract if selected else None, roles)
         digest = hashlib.sha256(scenario.encode("utf-8")).hexdigest()
         objective = objective_for(scenario)
+        mission = MissionContract.draft(scenario, objective, mode)
 
         return {
             "status": status,
@@ -270,6 +273,9 @@ class ScenarioPreflight:
             "detail": detail,
             "scenario": scenario,
             "objective": objective,
+            "mission_id": mission.mission_id,
+            "mission_state": "draft" if selected is None else "baseline_found",
+            "mission_contract": mission.describe(),
             "scenario_sha256": digest,
             "execution_mode": mode,
             "approval_required": mode == HARDWARE,

@@ -20,11 +20,13 @@ from QKD_PROJ.hwtools import (  # noqa: E402
     SafetyGate,
     run_bbb,
 )
+from QKD_PROJ.orchestrator.execution_guard import require_brokered_entrypoint  # noqa: E402
 
 CONTRACT = "gate9-bbb-host-tooling.yaml"
 
 
 def main(argv: list[str]) -> int:
+    require_brokered_entrypoint(__file__)
     if len(argv) != 1:
         allowed = Contracts.load(CONTRACT).test_spec.get("scripts") or {}
         print(f"usage: run_bbb_diagnostic.py <script>\nallowed: {', '.join(sorted(allowed))}")

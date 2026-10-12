@@ -51,9 +51,18 @@ APPROVAL_DECIDE = "approval.decide"
 JOB_START = "job.start"
 JOB_DISCOVER = "job.discover"
 JOB_MISSION = "job.mission"
+MODELS_LIST = "models.list"
+PROJECTS_CATALOG = "projects.catalog"
+PROJECTS_REGISTER = "projects.register"
+HARDWARE_STATUS = "hardware.status"
+HARDWARE_CHECK = "hardware.check"
+HARDWARE_CATALOG = "hardware.catalog"
+HARDWARE_DISCOVER = "hardware.discover"
+HARDWARE_REGISTER = "hardware.register"
 JOB_MISSION_REVISE = "job.mission.revise"
 JOB_STEER = "job.steer"
 JOB_CANCEL = "job.cancel"
+JOB_RESUME = "job.resume"
 CONTRACT_PROMOTION_PREVIEW = "contract.promotion.preview"
 CONTRACT_PROMOTION_REQUEST = "contract.promotion.request"
 CONTRACT_PROMOTION_APPLY = "contract.promotion.apply"
@@ -142,6 +151,14 @@ class WireSession:
 
         command_id = frame.get("commandId")
         if kind not in (
+            MODELS_LIST,
+            PROJECTS_CATALOG,
+            PROJECTS_REGISTER,
+            HARDWARE_STATUS,
+            HARDWARE_CHECK,
+            HARDWARE_CATALOG,
+            HARDWARE_DISCOVER,
+            HARDWARE_REGISTER,
             SCENARIO_PREFLIGHT,
             APPROVAL_DECIDE,
             JOB_START,
@@ -150,6 +167,7 @@ class WireSession:
             JOB_MISSION_REVISE,
             JOB_STEER,
             JOB_CANCEL,
+            JOB_RESUME,
             CONTRACT_PROMOTION_PREVIEW,
             CONTRACT_PROMOTION_REQUEST,
             CONTRACT_PROMOTION_APPLY,
@@ -182,6 +200,16 @@ class WireSession:
         self._result(command_id, True, **payload)
 
     def _act(self, kind: str, frame: dict[str, Any]) -> dict[str, Any]:
+        if kind in (HARDWARE_STATUS, HARDWARE_CHECK, HARDWARE_CATALOG, HARDWARE_DISCOVER, HARDWARE_REGISTER):
+            return self._control_command({"command": kind.replace(".", "-"),
+                                          "hardware_selection": frame.get("hardwareSelection"),
+                                          **({"setup": frame.get("setup")} if kind == HARDWARE_REGISTER else {}),
+                                          **({"devices": frame.get("devices")} if kind == HARDWARE_CHECK else {})})
+        if kind in (PROJECTS_CATALOG, PROJECTS_REGISTER):
+            return self._control_command({"command": kind.replace(".", "-"),
+                                          **({"project": frame.get("project")} if kind == PROJECTS_REGISTER else {})})
+        if kind == MODELS_LIST:
+            return self._control_command({"command": "models-list"})
         if kind == CAMPAIGN_CATALOG:
             return self._control_command({"command": "campaign-catalog"})
 
@@ -218,6 +246,7 @@ class WireSession:
                 "max_iterations": _number(frame, "maxIterations", 8),
                 "max_auto_approvals": _number(frame, "maxAutoApprovals", 24),
                 "duration_hours": _number(frame, "durationHours", 12),
+                "authorization_scope": frame.get("authorizationScope", "scenario"),
             })
 
         if kind == CAMPAIGN_BUNDLE_APPROVE:
@@ -229,6 +258,7 @@ class WireSession:
                 "max_iterations": _number(frame, "maxIterations", 8),
                 "max_auto_approvals": _number(frame, "maxAutoApprovals", 24),
                 "duration_hours": _number(frame, "durationHours", 12),
+                "authorization_scope": frame.get("authorizationScope", "scenario"),
                 "comment": str(frame.get("comment", "")),
             })
 
@@ -279,7 +309,8 @@ class WireSession:
             return self._control_command(request)
 
         if kind == SCENARIO_PREFLIGHT:
-            return {"preflight": self.control.preflight(_text(frame, "scenario"))}
+            options = {"hardware_selection": frame["hardwareSelection"]} if "hardwareSelection" in frame else {}
+            return {"preflight": self.control.preflight(_text(frame, "scenario"), **options)}
 
         if kind == JOB_START:
             answer = self.control.start(
@@ -300,13 +331,19 @@ class WireSession:
             return {"job": answer["job"], "preflight": answer["preflight"]}
 
         if kind == JOB_MISSION:
+            options = {"model_selection": frame["modelSelection"]} if "modelSelection" in frame else {}
+            if "hardwareSelection" in frame:
+                options["hardware_selection"] = frame["hardwareSelection"]
+            if "projectId" in frame:
+                options["project_id"] = frame["projectId"]
             answer = self.control.mission(
                 _text(frame, "objective"),
                 _text(frame, "scenario"),
                 _text(frame, "scenarioSha256"),
                 _text(frame, "searchPolicy"),
+                **options,
             )
-            return {"job": answer["job"], "preflight": answer["preflight"]}
+            return {key: answer[key] for key in ("job", "preflight", "workflow", "execution_mode", "reused")}
 
         if kind == JOB_MISSION_REVISE:
             return self._control_command({
@@ -336,6 +373,10 @@ class WireSession:
                 _text(frame, "jobId"), _text(frame, "message"), _text(frame, "sentBy")
             )
             return {"pending": answer["pending"], "willBeDelivered": answer["will_be_delivered"]}
+
+        if kind == JOB_RESUME:
+            return self._control_command({'command': 'resume-step', 'job_id': _text(frame, 'jobId'),
+                                          'requested_by': _text(frame, 'requestedBy'), 'note': _text(frame, 'note')})
 
         answer = self.control.cancel(
             _text(frame, "jobId"), _text(frame, "cancelledBy"), str(frame.get("reason", ""))

@@ -1,23 +1,24 @@
 /**
  * What this page is attached to, and what it is allowed to say about itself.
  *
- * There are no settings to change yet, and inventing some would be worse than
- * admitting it. What this view does instead is answer the questions a person
- * debugging a live board actually asks: which daemon, how far behind, has this
- * page ever lost frames, and where does the token live.
+ * Model preferences apply to new jobs. Diagnostics describe this connection.
  *
  * The token is shown as present or absent, never printed. It authorises
  * `approval.decide`; a screenshot of this tab should not be a credential.
  */
 
 import type { Platform } from '../usePlatform'
+import { ModelPicker } from '../ModelPicker'
+import { useModelSelection } from '../useModelSelection'
 
 export function SettingsView({ platform, token }: { platform: Platform; token: string | null }) {
   const { daemon, liveness, resyncs, dropped, detail } = platform.connection
   const state = platform.state
+  const models = useModelSelection()
 
   return (
     <div className="pad prose">
+      <ModelPicker api={platform.api} selection={models.selection} onChange={models.change} saveError={models.saveError} />
       <h2>This session</h2>
       <dl className="meta wide">
         <Row label="daemon" value={daemon?.address ?? '—'} />

@@ -11,6 +11,7 @@ the recipe, not editing this file.
 from __future__ import annotations
 
 import csv
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,7 @@ from .instruments import RTM3004, Waveform
 from .record import RunRecord
 from .result import FAIL, ToolResult
 from .safety import SafetyGate, SafetyViolation
+from .measurement_stats import EdgePolicy, waveform_statistics
 from .scpi import ScpiError
 
 # Values a recipe must record for its result to be reproducible. "How many
@@ -69,6 +71,60 @@ class Recipe(Protocol):
     ) -> RecipeOutcome: ...
 
 
+def identify_scope(gate: SafetyGate, record: RunRecord | None = None) -> ToolResult:
+    """Read identity only, including on failure: no STOP, reset or acquisition."""
+    from .result import PASS
+    started = time.monotonic()
+    result = ToolResult(tool="scope", action="identify")
+    result.measurements["identity_only"] = True
+    result.measurements["diagnostic_complete"] = False
+    scope, failure = None, None
+    phase = "authorization"
+    try:
+        gate.require("scope_identify")
+        phase = "configuration"
+        resolved = gate.require_verified("scope.model", "scope.host", "scope.port")
+        result.measurements["target"] = {"host": str(resolved["scope.host"]), "port": int(resolved["scope.port"])}
+        phase = "tcp_connect"
+        scope = RTM3004(host=str(resolved["scope.host"]), port=int(resolved["scope.port"]))
+        phase = "scpi_identification"
+        raw = scope.scpi.query("*IDN?")
+        result.measurements["identification_response"] = raw
+        parts = [part.strip() for part in raw.split(",")]
+        if len(parts) < 4 or not parts[1]:
+            raise ScpiError("Malformed *IDN? response")
+        manufacturer, model, serial, firmware = parts[:4]
+        phase = "model_validation"
+        if model != resolved["scope.model"]:
+            raise ScpiError(f"Expected {resolved['scope.model']}, received {model}")
+        phase = "option_query"
+        options = scope.scpi.query("*OPT?")
+        result.measurements["options_response"] = options
+        from .instruments.rtm3004 import ScopeIdentity
+        identity = ScopeIdentity(manufacturer, model, serial, firmware,
+                                tuple(o.strip() for o in options.split(",") if o.strip()), raw)
+        result.versions.update(identity.as_versions())
+        result.measurements["identity_verified"] = True
+        result.measurements["diagnostic_complete"] = True
+        result.verdict = PASS
+    except Exception as exc:
+        failure = f"{type(exc).__name__}: {exc}"
+        result.measurements.update(failure_stage=phase, failure_error=failure,
+            diagnostic_complete=(phase in {"tcp_connect", "scpi_identification", "model_validation", "option_query"}
+                                 and isinstance(exc, (OSError, ScpiError))))
+    finally:
+        if scope is not None:
+            try:
+                result.commands = scope.scpi.commands()
+            finally:
+                try:
+                    scope.close()
+                except Exception as exc:
+                    failure = failure or f"{type(exc).__name__}: {exc}"
+                    result.measurements.update(diagnostic_complete=False, cleanup_error=str(exc))
+    return _finish(result, started, record, failure=failure)
+
+
 def measure_scope(
     recipe: Recipe,
     params: dict[str, Any],
@@ -88,9 +144,9 @@ def measure_scope(
 
     try:
         gate.require(operation)
-        resolved = gate.require_verified(
-            "scope.model", "scope.resource", "scope.host", "scope.port"
-        )
+        # This driver opens a TCP connection, not a VISA resource. Requiring
+        # an unused resource string made otherwise valid device plans fail.
+        resolved = gate.require_verified("scope.model", "scope.host", "scope.port")
     except SafetyViolation as exc:
         result.commands = []
         return _finish(result, started, record, failure=str(exc))
@@ -122,7 +178,70 @@ def measure_scope(
                 f"measurement to the wrong instrument."
             )
 
+        saved_waveforms: list[Waveform] = []
+        channel_captures: dict[int, int] = {}
+
+        def preserve_waveform(waveform: Waveform) -> None:
+            if record is None or any(waveform is saved for saved in saved_waveforms):
+                return
+            count = channel_captures.get(waveform.channel, 0) + 1
+            suffix = "" if count == 1 else f"_{count}"
+            path = _save_waveform_csv(
+                record.dir / f"{name}_CH{waveform.channel}{suffix}.csv", waveform
+            )
+            result.add_artifact(path, kind="waveform_csv", relative_to=record.dir)
+            saved_waveforms.append(waveform)
+            channel_captures[waveform.channel] = count
+
+        scope.waveform_sink = preserve_waveform
         outcome = recipe(scope, params, gate)
+        # Also preserve waveforms returned by recipes using another acquisition
+        # mechanism, before statistics/front-end validation can fail.
+        for waveform in outcome.waveforms:
+            preserve_waveform(waveform)
+        # Recipe metadata is useful, but cannot overwrite statistics recomputed
+        # from actual samples or instrument front-end readbacks below.
+        result.measurements.update(outcome.measurements)
+
+        # Every saved waveform gets the same deterministic statistics. Recipes
+        # may choose the threshold/direction, but cannot substitute prose for
+        # sample interval, voltage or edge timing evidence.
+        edge_policy = EdgePolicy(
+            threshold_v=(
+                float(params["edge_threshold_v"])
+                if isinstance(params.get("edge_threshold_v"), (int, float))
+                and not isinstance(params.get("edge_threshold_v"), bool)
+                else None
+            ),
+            hysteresis_v=(
+                float(params.get("edge_hysteresis_v", 0.0))
+                if isinstance(params.get("edge_hysteresis_v", 0.0), (int, float))
+                and not isinstance(params.get("edge_hysteresis_v", 0.0), bool)
+                else 0.0
+            ),
+            direction=str(params.get("edge_direction") or "rising").lower(),
+        )
+        waveform_rows: list[dict[str, Any]] = []
+        statistics_level = params.get("statistics_level", "basic")
+        if statistics_level not in {"basic", "full"}:
+            raise ValueError("statistics_level must be basic or full")
+        for waveform in outcome.waveforms:
+            stats = waveform_statistics(waveform, policy=edge_policy,
+                                        include_distribution=statistics_level == "full")
+            waveform_rows.append({"channel": waveform.channel, **stats})
+            result.measurements.update(
+                {f"CH{waveform.channel}_{key}": value for key, value in stats.items()}
+            )
+            # The electrical gate consumes these long-established aliases.
+            # Bind them to the samples as well, not to recipe-authored numbers.
+            result.measurements.update({f"CH{waveform.channel}_min_v": stats["min_voltage_v"],
+                                        f"CH{waveform.channel}_max_v": stats["max_voltage_v"]})
+        if len(waveform_rows) == 1:
+            result.measurements.update(
+                {key: value for key, value in waveform_rows[0].items() if key != "channel"}
+            )
+        if waveform_rows:
+            result.measurements["waveform_statistics"] = waveform_rows
 
         # Recorded here rather than left to the recipe: probe attenuation and
         # coupling scale and qualify every voltage the recipe reports, and the
@@ -137,7 +256,8 @@ def measure_scope(
 
         scope.check_errors(f"recipe {name}")
 
-        result.measurements.update(outcome.measurements)
+        if gate.contracts.test_spec.get("status") == "proposed_hardware_boundary":
+            gate.require_measured_voltage(result.measurements)
         result.verdict = outcome.verdict
         for warning in outcome.warnings:
             result.warn(warning)
@@ -163,12 +283,23 @@ def measure_scope(
                 f"measurement cannot be reproduced from the record alone."
             )
 
-        if record is not None:
-            for waveform in outcome.waveforms:
-                path = _save_waveform_csv(
-                    record.dir / f"{name}_CH{waveform.channel}.csv", waveform
-                )
-                result.add_artifact(path, kind="waveform_csv", relative_to=record.dir)
+        if record is not None and waveform_rows:
+            # One deterministic calculation, reusable by Builder/Verifier.
+            # The original samples and hashes remain independently inspectable.
+            analysis = {
+                "schema_version": 1, "source": "host waveform_statistics",
+                "method": "min/max over recorded volts; Vpp=max-min; period=mean same-polarity edge interval; frequency=1/period",
+                "edge_policy": {"threshold_v": edge_policy.threshold_v,
+                                "hysteresis_v": edge_policy.hysteresis_v,
+                                "direction": edge_policy.direction},
+                "waveforms": waveform_rows,
+                "statistics_level": statistics_level,
+            }
+            # ToolResult serializes artifact dataclasses in to_dict().
+            analysis["artifacts"] = [a for a in result.to_dict()["artifacts"] if a["kind"] == "waveform_csv"]
+            path = record.dir / "waveform_analysis.json"
+            path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8")
+            result.add_artifact(path, kind="waveform_analysis", relative_to=record.dir)
 
         if screenshot and record is not None:
             path = scope.save_screenshot(record.dir / f"{name}.png")
@@ -177,7 +308,15 @@ def measure_scope(
         return _finish(result, started, record)
 
     except Exception as exc:  # noqa: BLE001 - every failure must reach SAFE state
-        scope.emergency_stop()
+        operations = set(gate.contracts.test_spec.get("allowed_operations") or [])
+        if operations and operations <= {"scope_identify", "oscilloscope_capture"}:
+            # A passive capture does not authorize changing generator outputs.
+            try:
+                scope.stop()
+            except Exception as stop_error:
+                result.warnings.append(f"Scope stop could not be confirmed: {stop_error}")
+        else:
+            scope.emergency_stop()
         return _finish(result, started, record, failure=f"{type(exc).__name__}: {exc}")
     finally:
         result.commands = scope.scpi.commands()

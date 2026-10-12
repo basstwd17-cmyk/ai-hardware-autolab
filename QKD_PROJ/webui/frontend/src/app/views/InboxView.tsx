@@ -69,7 +69,7 @@ function ApprovalCard({ approval, platform }: { approval: ApprovalRow; platform:
       </div>
       <dl className="meta">
         <Row label="job" value={approval.job_id} />
-        <Row label="contract" value={approval.contract} />
+        <Row label="hardware" value={approval.contract} />
         <Row label="step" value={approval.step_id} />
         <Row label="scope" value={approval.scope} />
         <Row label="executions" value={String(approval.max_executions)} />
@@ -78,6 +78,7 @@ function ApprovalCard({ approval, platform }: { approval: ApprovalRow; platform:
           <Row label="bundle" value={`${approval.bundle_sha256.slice(0, 16)}…`} />
         )}
       </dl>
+      <p className="muted">프로그램·펌웨어 배포처럼 장비 상태가 바뀌는 이 호출에만 적용됩니다. 조회·진단·측정은 설치된 보드 프로필 범위에서 자동 실행됩니다. 작업 취소 시 미사용 승인은 철회됩니다.</p>
       {Object.keys(approval.artifacts ?? {}).length > 0 && (
         <dl className="meta">
           {Object.entries(approval.artifacts ?? {}).map(([name, digest]) => (
@@ -90,7 +91,7 @@ function ApprovalCard({ approval, platform }: { approval: ApprovalRow; platform:
       )}
       <label className="approval-review">
         <input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />
-        I reviewed this exact scope and the artifact digests above.
+        위 장비 작업과 파일 해시를 확인했습니다.
       </label>
       <div className="approval-fields">
         <label>
@@ -104,7 +105,7 @@ function ApprovalCard({ approval, platform }: { approval: ApprovalRow; platform:
       </div>
       <div className="row">
         <button className="chip approval-accept" disabled={busy !== null} onClick={() => void decide('accepted')}>
-          {busy === 'accepted' ? 'recording…' : 'accept exact scope'}
+          {busy === 'accepted' ? '기록 중…' : `이 단계 ${approval.max_executions}회 승인`}
         </button>
         <button className="chip approval-decline" disabled={busy !== null} onClick={() => void decide('declined')}>
           {busy === 'declined' ? 'recording…' : 'decline'}

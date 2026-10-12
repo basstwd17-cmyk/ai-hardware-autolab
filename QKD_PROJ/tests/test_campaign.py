@@ -222,6 +222,35 @@ def test_v2_admits_each_new_build_through_its_pass_manifest(tmp_path):
     assert recorded.payload["artifacts"] == {reference: sha256_file(artifact)}
 
 
+def test_v2_late_binds_artifacts_from_an_earlier_step_result(tmp_path):
+    policy, artifact, reference, _ = make_policy_v2(tmp_path)
+    ledger = JobLedger(tmp_path / "jobs.db")
+    job = prepared_job(ledger)
+    ledger.record_handoff(
+        job.job_id,
+        "StepResult",
+        "builder",
+        {
+            "kind": "StepResult",
+            "agent": "builder",
+            "step_id": "build",
+            "status": "done",
+            "runs": ["run-one"],
+        },
+        iteration=job.iteration,
+        step_id="build",
+    )
+    approver = CampaignAutoApprover(
+        ledger, policy, now=lambda: NOW, runs_dir=tmp_path / "runs"
+    )
+
+    evaluation = approver.evaluate(job, hardware_step(), AGENTS["board-operator"])
+
+    assert evaluation.allowed is True
+    assert evaluation.artifacts == {reference: sha256_file(artifact)}
+    assert evaluation.lineage_runs == ("run-one",)
+
+
 def test_v2_refuses_bytes_outside_the_approved_build_lineage(tmp_path):
     policy, artifact, reference, manifest = make_policy_v2(tmp_path)
     ledger = JobLedger(tmp_path / "jobs.db")
@@ -583,9 +612,8 @@ def test_unknown_fields_and_unbounded_artifacts_are_rejected(tmp_path):
     assert policy.campaign_id == "night-1"
 
 
-def test_service_wires_the_same_campaign_into_loop_and_tool_gate(tmp_path, monkeypatch):
+def test_production_service_rejects_retired_campaign_settings(tmp_path):
     policy, _, _ = make_policy(tmp_path)
-    monkeypatch.setattr(entrypoint, "DEFAULT_CAMPAIGNS", tmp_path)
     args = argparse.Namespace(
         ledger=str(tmp_path / "service.db"),
         runs=str(tmp_path / "runs"),
@@ -601,13 +629,5 @@ def test_service_wires_the_same_campaign_into_loop_and_tool_gate(tmp_path, monke
         pipe=None,
     )
 
-    service, raw = entrypoint.build_service(args)
-
-    assert raw is not None
-    assert service.control.campaign_controller is not None
-    assert service.daemon.loop.auto_approver.policy.sha256 == policy.sha256
-    assert raw.hardware_approval.active_campaign_sha256 == policy.sha256
-    assert raw.hardware_approval.active_campaign_contracts == {
-        "g.yaml": policy.permissions[0].contract_sha256
-    }
-    raw.close()
+    with pytest.raises(ValueError, match="Campaign execution has been retired"):
+        entrypoint.build_service(args)

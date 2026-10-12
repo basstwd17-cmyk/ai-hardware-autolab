@@ -237,6 +237,7 @@ def test_production_assembly_wires_the_configured_database_and_scope(tmp_path: P
         knowledge_project="qkd-proj",
         knowledge_hardware="rtase-v1",
         knowledge_revision="v1.0",
+        workspace_root=str(tmp_path / "workspaces"),
     )
 
     service, raw = CLI.build_service(args)
@@ -245,6 +246,10 @@ def test_production_assembly_wires_the_configured_database_and_scope(tmp_path: P
     assert service.knowledge_store.path == tmp_path / "knowledge.db"
     assert service.knowledge_scope == SCOPE
     assert service.control.knowledge_retriever is not None
+    runtime = service.daemon.loop.conversation.runtime
+    assert runtime.knowledge_retriever is not None
+    assert runtime.knowledge_scope == SCOPE
+    assert service.daemon.loop.simple is None
 
 
 class DiscoveryRunner:

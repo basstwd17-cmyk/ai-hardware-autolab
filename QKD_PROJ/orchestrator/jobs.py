@@ -271,6 +271,11 @@ class Event:
         )
 
     def describe(self) -> dict[str, Any]:
+        payload = self.payload
+        if self.kind == "conversation.hardware.prepared":
+            # Keep refreshed host authority in SQLite, not browser transcripts.
+            payload = {"feedback_event_id": payload.get("feedback_event_id"),
+                       "device_readiness": (payload.get("inputs") or {}).get("device_readiness")}
         return {
             "event_id": self.event_id,
             "job_id": self.job_id,
@@ -278,7 +283,7 @@ class Event:
             "at": self.at,
             "kind": self.kind,
             "agent": self.agent,
-            "payload": self.payload,
+            "payload": payload,
         }
 
 
@@ -521,7 +526,11 @@ class JobLedger:
         if state is not None:
             sql += " WHERE state = ?"
             params.append(state)
-        sql += " ORDER BY created_at DESC"
+        # Timestamps have one-second precision. Several UI submissions in the
+        # same second must still have a stable order; otherwise the scheduler
+        # can pick a different job on identical ledgers and tests become
+        # probabilistic. Within a timestamp, SQLite rowid is creation order.
+        sql += " ORDER BY created_at DESC, rowid ASC"
         conn = self._connect()
         try:
             return [Job.of(row) for row in conn.execute(sql, params)]
@@ -596,6 +605,72 @@ class JobLedger:
 
     # -- events --------------------------------------------------------------
 
+    def resume_plan_format(self, job_id: str, actor: str, note: str) -> Job:
+        """One explicit planning-only retry, with state/event committed together.
+
+        No Plan, dispatch or result may exist in this iteration. Grants, Brief,
+        workspace and earlier evidence are not edited or extended.
+        """
+        from .plan_format import is_plan_format_reason
+        if not actor.strip() or not note.strip():
+            raise JobLedgerError('Resume needs an actor and a resolution note')
+        with self._transaction() as conn:
+            job = conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone()
+            if job is None or job['state'] != BLOCKED:
+                raise JobLedgerError('Planning job is no longer blocked')
+            block = conn.execute("SELECT payload FROM events WHERE job_id=? AND kind='job.blocked' ORDER BY event_id DESC LIMIT 1", (job_id,)).fetchone()
+            if not block or not is_plan_format_reason(str(json.loads(block['payload']).get('reason', ''))):
+                raise JobLedgerError('Not a planning JSON failure')
+            iteration = job['iteration']
+            handoffs = conn.execute("SELECT 1 FROM handoffs WHERE job_id=? AND iteration=? AND kind IN ('Plan','StepResult','Verdict')", (job_id, iteration)).fetchone()
+            events = conn.execute("SELECT kind,payload FROM events WHERE job_id=? AND kind IN ('step.dispatch.started','plan.retry.requested')", (job_id,)).fetchall()
+            if handoffs or any(json.loads(e['payload']).get('iteration') == iteration for e in events):
+                raise JobLedgerError('Plan/device work exists or this iteration already used its planning retry')
+            self._append(conn, job_id, 'plan.retry.requested',
+                         {'iteration': iteration, 'by': actor, 'note': note,
+                          'mode': 'replan_from_saved_context', 'search_budget': 0}, actor)
+            conn.execute('UPDATE jobs SET state=?, updated_at=? WHERE job_id=?', (RUNNING, utc_now(), job_id))
+            self._append(conn, job_id, 'job.running', {'from': BLOCKED, 'to': RUNNING,
+                         'outcome': None, 'reason': 'planning-only retry requested; device authority unchanged'}, actor)
+            return Job.of(conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone())
+
+    def resume_pre_device_step(self, job_id: str, handoff_id: str, actor: str, note: str) -> Job:
+        """Atomically preserve completed steps and open a fresh attempt for an unexecuted one."""
+        if not actor.strip() or not note.strip():
+            raise JobLedgerError('Resume needs an actor and a resolution note')
+        with self._transaction() as conn:
+            job = conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone()
+            if job is None or job['state'] not in (BLOCKED, RUNNING):
+                raise JobLedgerError('Job is no longer resumable')
+            old = int(job['iteration'])
+            rows = conn.execute('SELECT * FROM handoffs WHERE job_id=? AND iteration=? ORDER BY event_id', (job_id, old)).fetchall()
+            stop = next((r for r in rows if r['handoff_id'] == handoff_id), None)
+            plans = [r for r in rows if r['kind'] == 'Plan']
+            if stop is None or stop['kind'] != 'StepResult' or len(plans) != 1 or any(r['kind'] == 'Verdict' for r in rows):
+                raise JobLedgerError('Resume target changed or has already been reduced')
+            payload = json.loads(stop['payload'])
+            if payload.get('status') != 'blocked' or payload.get('repair_target') != 'platform_deployment' or payload.get('hardware_contacted') is not False or payload.get('hardware_state_unknown') is not False or payload.get('runs'):
+                raise JobLedgerError('Resume requires proof that the device was not contacted')
+            completed = [r for r in rows if r['kind'] == 'StepResult' and r['handoff_id'] != handoff_id]
+            if any(json.loads(r['payload']).get('status') != 'done' or json.loads(r['payload']).get('hardware_state_unknown') is True for r in completed):
+                raise JobLedgerError('Other unresolved steps remain')
+            iteration = old + 1
+            plan = json.loads(plans[0]['payload'])
+            plan['iteration'] = iteration
+            plan['resumed_from'] = {'iteration': old, 'blocked_handoff': handoff_id}
+            conn.execute('UPDATE jobs SET state=?, iteration=?, updated_at=? WHERE job_id=?', (RUNNING, iteration, utc_now(), job_id))
+            self._append(conn, job_id, 'job.running', {'from': job['state'], 'to': RUNNING, 'outcome': None, 'reason': 'resolved pre-device block: '+note}, actor)
+            self._append(conn, job_id, 'iteration.started', {'iteration': iteration}, None)
+            self._append(conn, job_id, 'job.resumed', {'iteration': iteration, 'from_iteration': old, 'step_id': stop['step_id'], 'blocked_handoff': handoff_id, 'note': note}, actor)
+            self._write_handoff(conn, job_id, iteration, 'Plan', plans[0]['agent'], '', plan, None, reused=True)
+            for row in completed:
+                kept = json.loads(row['payload'])
+                kept['iteration'] = iteration
+                kept['reused_from'] = {'iteration': old, 'handoff_id': row['handoff_id'], 'sha256': row['sha256']}
+                kept['summary'] = '이전 실행 결과 재사용 — 새 장비 실행 아님. ' + str(kept.get('summary') or '')
+                self._write_handoff(conn, job_id, iteration, 'StepResult', row['agent'], row['step_id'], kept, None, reused=True)
+            return Job.of(conn.execute('SELECT * FROM jobs WHERE job_id=?', (job_id,)).fetchone())
+
     def _append(
         self,
         conn: sqlite3.Connection,
@@ -650,6 +725,17 @@ class JobLedger:
         finally:
             conn.close()
 
+    def scope_connection_events(self, profile_sha256: str) -> list[Event]:
+        """Operator wiring persists across jobs sharing this installed setup."""
+        conn = self._connect()
+        try:
+            return [Event.of(row) for row in conn.execute(
+                "SELECT * FROM events WHERE kind IN ('conversation.scope.connected', 'conversation.scope.configured') "
+                "AND agent = 'human' AND json_extract(payload, '$.profile_sha256') = ? "
+                "ORDER BY event_id", (profile_sha256,))]
+        finally:
+            conn.close()
+
     def latest_event_id(self) -> int:
         conn = self._connect()
         try:
@@ -669,6 +755,7 @@ class JobLedger:
         step_id: str,
         payload: dict[str, Any],
         failure_signature: str | None,
+        *, reused: bool = False,
     ) -> str:
         digest = hashlib.sha256(canonical_payload(payload)).hexdigest()
         handoff_id = f"{job_id}:{iteration}:{kind}:{agent}:{step_id}" if step_id else (
@@ -678,7 +765,8 @@ class JobLedger:
             conn,
             job_id,
             f"handoff.{kind}",
-            {"iteration": iteration, "agent": agent, "step_id": step_id, "sha256": digest},
+            {"iteration": iteration, "agent": agent, "step_id": step_id, "sha256": digest,
+             **({'reused': True} if reused else {})},
             agent,
         )
         try:
@@ -734,6 +822,11 @@ class JobLedger:
             row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             if row is None:
                 raise JobLedgerError(f"no such job: {job_id}")
+            if row["state"] == DONE:
+                raise JobLedgerError(
+                    f"job {job_id} is already terminal as {row['outcome']}; "
+                    "a late handoff cannot reopen or extend it"
+                )
             resolved = int(row["iteration"]) if iteration is None else int(iteration)
             handoff_id = self._write_handoff(
                 conn, job_id, resolved, kind, agent, step_id, payload, failure_signature
@@ -902,6 +995,20 @@ class JobLedger:
         if row is None:
             raise JobLedgerError(f"no such approval: {approval_id}")
         return Approval.of(row)
+
+    def approvals(self, job_id: str | None = None) -> list[Approval]:
+        """Return durable approval history for policy matching and UI diagnostics."""
+        sql = "SELECT * FROM approvals"
+        params: list[Any] = []
+        if job_id is not None:
+            sql += " WHERE job_id = ?"
+            params.append(job_id)
+        sql += " ORDER BY requested_at, rowid"
+        conn = self._connect()
+        try:
+            return [Approval.of(row) for row in conn.execute(sql, params)]
+        finally:
+            conn.close()
 
     def pending_approvals(self, job_id: str | None = None, now: str | None = None) -> list[Approval]:
         """The inbox. Expired requests are not in it.

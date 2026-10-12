@@ -1,203 +1,144 @@
-# QKD_PROJ — 보드 개발 자동화 플랫폼
+# QKD_PROJ — 프로젝트 개발 에이전트 플랫폼
 
-RTASE_V1 (Lattice MachXO2 CPLD) · BeagleBone Black PRU · RTM3004 오실로스코프를
-하나의 명령으로 시험하는 자동화 시스템.
+사용자는 자기 프로젝트의 소스 폴더를 연결하고 원하는 동작을 시나리오로 입력합니다. 신규 작업은 항상
+**Lead → Builder → Verifier** 순서로 진행합니다. Lead가 방법을 정리하고 Builder가
+코드·빌드·장비 호출을 수행하며, Verifier가 원래 요청과 실제 산출물·run을 비교합니다.
 
-## 설계 원칙
+Lead는 작업공간·보드 자료를 읽고 필요한 제조사 문서와 데이터시트를 웹에서 조사합니다.
+문서 URL과 설계에 사용한 근거는 역할 사이에 전달하고 최종 결과에도 남깁니다.
+측정이 목표와 다르면 같은 job에서 설계 재검토 → 코드 수정 → 재측정으로 돌아갑니다.
+장비에 접촉하기 전의 파일·인자 오류도 Builder가 수정합니다. 프로그래밍 성공만으로
+전체 기능 구현을 완료했다고 판단하지 않도록 원래 시나리오를 검증 기준으로 유지합니다.
 
-**AI는 교체 가능하고, Tool API는 자산이다.**
+`Map`은 **전체 지식맵**을 기본으로 엽니다. 어두운 캔버스에 분류별 가지와 개별 기록을
+별자리처럼 표시하며 확대·이동·검색과 기록 선택을 지원합니다. `가지별 보기`에서는
+보드·부품·회로·소프트웨어·측정·자료의
+큰 가지에서 시작해, 예를 들어 `보드 → rtase-v1 · v1.0 → PRU → 기록`으로 좁혀 갑니다.
+기록을 선택하면 해당 내용의 출처·검증 상태·보드와 리비전을 확인합니다. 검색은 접힌
+가지도 포함하며 계약·실행 이력은 별도 상세 화면에 있습니다. 대화형 작업의 연구·구현
+메모와 장비 반환 기록은 작업 원장에서 지식 DB로 자동 적재합니다. 재시작 시 놓친
+기록도 이어 받으며 모델·장비를 재실행하지 않습니다. 에이전트 설명은 미검증으로 저장하고,
+호스트 관측 확인은 해당 반환 기록에만 적용합니다. 기능 구현 성공과는 구분합니다.
+운영 사이트의 `지식맵 열기`에서 같은 지식을 볼 수 있습니다. 데몬과 릴레이가 켜져 있으면
+자동 동기화하며, PC가 꺼져 있으면 마지막 동기화 자료임을 표시합니다.
 
-AI 모델은 몇 달마다 바뀐다. 하지만 `program_cpld()`가 안정적으로 동작하면 그 위에는
-어떤 AI든 얹을 수 있다. 그래서 개발 순서는 Agent가 아니라 Tool Layer가 먼저다.
+플랫폼 실행에는 Docker나 WSL이 필요하지 않습니다. Builder는 job별 Git 작업공간에서
+호스트의 Codex 샌드박스 명령으로 코드를 작성·빌드·검증합니다. 로컬 명령의 네트워크와
+작업공간 밖 쓰기는 차단하고, 실제 장비 접근은 모델 셸과 분리된 하드웨어 어댑터가 맡습니다.
+자세한 경계는 [네이티브 실행 구조](docs/native-execution.md)를 참고하세요.
 
-**AI는 실시간 파형을 직접 만들지 않는다.**
+시작 화면에서 작업에 사용할 보드·장비 구성을 선택합니다. 최근 선택은 브라우저에
+저장하고, 제출한 구성과 해시는 각 job에 고정합니다. 다음 작업에서 다른 구성을 골라도
+진행 중인 작업의 대상은 바뀌지 않습니다. 기본 RTASE V1 설정은
+[hardware.yaml](boards/rtase-v1/v1.0/hardware.yaml)과
+[device-map.yaml](boards/rtase-v1/v1.0/device-map.yaml)에 있습니다. 장비 주소, SPI/JTAG
+핀, 스코프 채널, 전기적 한계가 여기에서 정해집니다. 신규 job이 실행 계약을 만들거나
+승인받지 않습니다. 다른 보드도 같은 Lead → Builder → Verifier 흐름을 사용합니다.
 
-AI는 계획·코드·판단을 담당하고, 실시간 동작은 BBB PRU / CPLD / DAC가 수행한다.
-5 ns 타이밍 경로에 Python, 네트워크, 모델 호출을 넣지 않는다.
+**다른 보드 등록**에서 보드 모델·리비전, 소스 경로·문서와 연결을 저장할 수 있습니다.
+**연결된 USB·시리얼 장치 찾기**는 Windows의 USB/COM 목록을 읽고, 사용자가 고른
+장치만 구성에 추가합니다. 탐색은 포트를 열거나 프로그램을 업로드하지 않습니다.
+연결 없이 소스 개발용으로 등록하거나 COM 포트를 직접 지정할 수도 있습니다.
+등록·선택에 데몬 재시작은 필요하지 않습니다. 사용법과 지원 범위는
+[다른 보드 지원](docs/board-independent-development.md)에 정리되어 있습니다.
 
-## 3계층
+작업 시작 시 전체 장비를 검사하지 않습니다. Lead·Builder·Verifier가 시나리오에
+필요한 장비 ID를 선택해 `check_connections`를 요청하면 USB/COM 존재 확인, BBB 식별,
+스코프 모델 조회, JTAG 체인 확인 중 해당 장비만 확인합니다. 기존 RTASE의
+`devices: [bbb]`는 스코프나
+CPLD를 호출하지 않습니다. 확인 후 요청한 에이전트에게 결과를 돌려줍니다.
+확인 결과와 시각·run은 같은 작업의 모든 에이전트가 재사용하며, 상태가 바뀌거나
+새 관측이 필요하면 해당 장비만 다시 확인할 수 있습니다. 소스 분석·개발처럼 장비가
+필요 없는 시나리오는 Hardware 모드에서도 접속 없이 진행할 수 있습니다.
+시작 화면에서도 원하는 장비를 선택해 직접 확인할 수 있으며, 이 절차는 선택사항입니다.
+설정 등록과 실제 연결 확인은 구분합니다. 연결 확인은 파형 측정이나 배선 검출이
+아니며, 필요한 기능은 별도로 구현·측정해야 합니다. USB/COM이 PC에 보인다는 결과는
+보드 모델·펌웨어 동작이 검증됐다는 뜻이 아닙니다. 새 시리얼 보드는 `serial_exchange`로
+통신할 수 있습니다. 임의 보드의 펌웨어 업로드는 해당 프로그래머 실행기가 추가로 필요하며,
+범용 SSH/Flash 실행기는 아직 제공하지 않습니다.
 
-```
-1계층  AI Agent          무엇을 할지 결정
-       요구사항 해석 · 데이터시트 검색 · 핀/타이밍 확인 · Verilog/C 생성
-       테스트 계획 작성 · 컴파일 에러 분석 · 측정 결과 해석 · 다음 실험 결정
-                              ↓  계획 (JSON)
-2계층  Orchestrator      그 순서를 실제로 실행
-       orchestrator/     평범한 Python. AI 없음. 상태 전이와 호출 순서만.
-                              ↓  함수 호출
-3계층  Hardware Tools    장비를 실제로 제어
-       hwtools/          AI 없음. 결정론적. 같은 입력 → 같은 ToolResult.
-```
+시나리오에 `스코프 CH3=RF1` 또는 `RF1을 CH3로 측정해줘`처럼 채널을 지정하면
+그 배선을 전제로 자동 적용합니다. 에이전트가 시간축·스케일·트리거를 정하고 연결 완료
+답변을 기다리지 않고 진행합니다. 이 지정은 같은 원장과 장비 설정의 다음 job에도
+이어지며, 새 시나리오나 사용자 메시지의 지정이 이전 값을 대체합니다. 전압·입력 종단·
+프로브 한계는 그대로 유지하고, 물리 배선을 소프트웨어로 검출하거나 이동했다고 표시하지 않습니다.
 
-### 계층 경계에서 지켜야 하는 것
+Hardware로 제출한 시나리오는 그 안에서 필요한 장비 호출을 자동 실행합니다.
 
-**안전 게이트는 3계층 안에 있다.** 2계층에 두면 새 Orchestrator나 직접 호출이
-우회한다. 모든 Tool은 `SafetyGate`를 인자로 받아 하드웨어를 만지기 전에 통과한다.
+- Builder는 job 작업공간에서 BBB/PRU 코드와 CPLD 설계를 만들고 빌드합니다.
+- BBB 스크립트와 SRAM 프로그램 XCF/비트스트림은 프로필 목록에 등록하지 않고 실행합니다.
+- 실행한 파일의 실제 SHA-256과 장비 결과는 `runs/`에 기록합니다.
 
-**판정과 해석을 나눈다.**
-- 3계층 = 결정론적 판정. test spec의 임계값 대비 PASS / FAIL / WARNING.
-- 1계층 = 해석과 다음 결정. 왜 실패했는지, 무엇을 바꿀지.
+파일은 해당 job 작업공간 안에 있어야 합니다. 다른 장비 주소, JTAG 장비 불일치,
+RTASE의 SRAM이 아닌 프로그램 동작, 입력 전압 한계 위반은 실행하지 않습니다. 이 RTASE
+조건을 새 보드에 복사하지 않습니다. 장비 접촉 후
+결과가 불명확하면 자동 재시도하지 않습니다.
+`--profile offline`에서는 장비 도구를 제공하지 않습니다.
 
-AI가 임계값 판정을 하면 같은 측정이 두 번 다르게 나온다. 하지 않는다.
+## 자기 프로젝트로 시작하기
 
-**모든 Tool은 `ToolResult`를 반환한다.** 콘솔 출력이 아니다. 반환값에
-실행된 명령줄, 아티팩트 SHA-256, 장비 `*IDN?`, 측정값이 들어 있어야
-나중에 재현할 수 있다.
+Start의 **내 프로젝트 연결**에서 Git 소스 폴더와 빌드·검증 안내를 저장하고 선택합니다.
+웹·데이터 분석·연구 도구 등 일반 개발에는 보드 설정이 필요 없습니다. 프로젝트별로
+소스 작업공간과 지식 조회/자동 적재 범위를 구분하며 진행 중 작업의 선택은 유지합니다.
+공유용 실행기는 일반 개발을 기본으로 시작하고 기존 하드웨어 실행 명령은 유지합니다.
+설치·프로젝트 연결·결과 반영은 [프로젝트 개발 안내](docs/project-development.md)를 참고하세요.
 
-## hwtools 구조 — 고정 / 가변
-
-측정 종류가 달라지면 스코프 설정도 달라진다. 그래서 3계층을 둘로 나눈다.
-
-**고정 (거의 안 바뀜)**
-
-| 파일 | 역할 |
-|---|---|
-| `result.py` | `ToolResult` / `Artifact` — 반환 계약 |
-| `safety.py` | `SafetyGate` — 계약 강제. 하드웨어 앞을 막는다 |
-| `scpi.py` | `ScpiTransport` — 기록형 SCPI, mock 지원 |
-| `ssh.py` | `SshTransport` — 기록형 SSH, client 주입 가능, BB_PW 자동 마스킹 |
-| `record.py` | `RunRecord` — 실행 디렉터리, manifest, 해시 |
-
-**가변 (실험마다 새로 작성)**
-
-`instruments/` 장비별 고정부 · `recipes/` 측정 설정 (타임베이스, 트리거, 표본 수)
-
-## 구현된 Tool
-
-| Tool | 계층 | 상태 |
-|---|---|---|
-| `measure_scope(recipe, ...)` | 3 | 동작. RTM3004 실장비 검증 완료 |
-| `build_cpld(project, gate)` | 3 | 동작. Diamond 3.14 실빌드 검증 완료 |
-| `scan_jtag()` | 3 | 동작. 승인 1 완료 |
-| `program_cpld_sram()` | 3 | 동작. 승인 2 완료, 1회 실행 소진 (계약 `execution_run` 기록) |
-| `measure_gate1_gpio()` | 3 | 작업 중 (승인 3) |
-| `run_bbb(script)` | 3 | 동작. 계약 allowlist(내용 해시) 안의 script만. fake SSH 검증 |
-| `deploy_pru()` | 3 | 동작. upload→build→install→service→VERSION/PING. fake SSH 검증 |
-| `Gate1Sequence` | 2 | 동작. bundle 검증·소비 + scan → program → measure 상태 머신 |
-
-## MCP 서버 (런타임 경계)
-
-```
-mcp_server/    같은 3계층 도구를 Claude Code · Codex 등 MCP 클라이언트에 노출
-```
-
-**AI가 교체 가능하다는 원칙의 실행판이다.** 도구·계약·RunRecord는 그대로 두고 위에
-얹는 런타임만 바꾼다. 의존성이 없고 API 키도 필요 없다 — MCP stdio는 줄 단위
-JSON-RPC라 `protocol.py`에 직접 구현했다.
-
-**도구 목록 자체가 첫 번째 잠금장치다.** `--allow-hardware` 없이는 보드를 만지는
-도구가 등록되지 않으므로 어떤 프롬프트로도 부를 수 없다. `SafetyGate`는 그 아래에서
-그대로 동작한다. 그 플래그는 실행 인자이고, 그게 이 아키텍처가 원래 그 결정을 두는
-자리다 — 사람이, 세션당 한 번.
-
-도구는 **경로가 아니라 계약 이름**을 받는다. 모델이 임의 경로를 넘길 수 있으면
-계약이 무슨 일이 있었는지 설명하기를 그만둔다.
-
-## Orchestrator (2계층)
-
-```
-orchestrator/
-  bundle.py     ApprovalBundle    사람이 한 번 서명하는 세션 단위 승인
-  ledger.py     ConsumptionLedger 그 서명이 얼마나 소진됐는지
-  preflight.py  첫 명령 전에 할 수 있는 모든 거부
-  sequence.py   Gate1Sequence     scan -> program -> measure 상태 머신
-```
-
-**preflight은 파일만으로 판정 가능한 모든 것을 한 번에 보고한다.** 첫 실패에서
-멈추지 않는다 — 하드웨어 세션은 보드에 전원이 들어가 있고 사람이 서 있는 상태라,
-3단계에서 "3단계는 애초에 못 돈다"를 알게 되면 1·2단계가 이미 소진한 예산까지
-같이 버린다. 심각도는 둘이다. `blocking`은 시작 자체가 불가, `advisory`는 시작은
-되지만 뒤 step이 안 돌아 도중에 멈춘다는 뜻이다. measure 도구가 없는데 scan을
-도는 건 정당한 사용이므로 advisory이지, 오류가 아니다. preflight은 하드웨어를
-건드리지도, 예산을 쓰지도, 상태를 바꾸지도 않는다.
-
-**resume은 `BLOCKED`만 허용한다.** BLOCKED는 아무것도 건드리지 않은 상태이므로
-막은 원인이 사라진 뒤 이어받아도 이미 일어난 일이 달라지지 않는다. `COMPLETE`는
-이어받을 게 없고, `ABORTED`는 step이 돌다 실패한 것이라 이어받으면 아무도 안 본
-실패를 건너뛰게 된다 — 그래서 편하게 만들지 않고 거부한다. resume은 새 `RunRecord`를
-쓰고 이전 디렉터리를 이름으로 가리킨다. 어느 쪽도 다른 쪽 이야기를 하려고
-덮어쓰이지 않는다.
-
-**계약과 bundle은 다른 질문에 답한다.** 계약은 "이 보드에서 이 작업이 애초에
-허용되는가"이고 오래 간다. bundle은 "지금, 이 파일들에 대해, 몇 번까지, 누가
-승인했는가"이고 짧게 간다. Orchestrator가 계약을 고쳐 스스로 권한을 만들 수 있으면
-계약은 사람이 검토하는 문서이기를 그만두므로, bundle은 별도 파일이고 2계층은
-**읽기만** 한다.
-
-bundle은 아티팩트를 **경로가 아니라 SHA-256으로** 지정한다. 서명과 실행 사이에
-경로는 다른 파일을 가리키게 만들 수 있지만 해시는 그럴 수 없다.
-
-소진 기록(ledger)은 계약이 아니라 기계 소유 파일에 쌓인다. 시도는 도구를 부르기
-**전에** 기록한다 — 나중에 기록하면 프로세스를 죽이는 step이 예산을 공짜로 돌려받는다.
-
-ledger는 **1회 승인과 2회 실행 사이를 막는 유일한 파일**이라 그에 맞게 쓴다.
-모든 쓰기는 temp + fsync + `os.replace`로 원자적이고, read-modify-write는 배타 락
-안에서 돌며 락 안에서 디스크를 다시 읽는다. 깨진 JSON은 빈 ledger로 취급하지 않고
-거부한다 — 그렇게 하면 기록된 모든 실행을 되돌려주기 때문이다. 예약됐는데 결과가
-안 적힌 항목(`dangling`)은 "도구가 불렸고 결과를 아무도 모른다"는 뜻이므로 preflight이
-다음 실행을 막는다. 보드를 건드렸는지 여기서는 알 수 없고, 안 건드렸다고 가정하면 안 된다.
-
-상태: `INIT -> READY -> SCANNED -> PROGRAMMED -> MEASURED -> COMPLETE`.
-종료 실패는 둘로 나뉜다. **`ABORTED`** 는 step이 돌다가 실패한 것 — 보드를 건드렸다.
-**`BLOCKED`** 는 step을 정당하게 시작할 수 없던 것(bundle 미승인, 예산 소진,
-도구 미구현) — 아무것도 건드리지 않았다.
-
-2계층은 보드 전원을 내릴 수 없다. `safe_off()`는 내린 척하지 않고 사람이 해야 할
-동작을 기록한다.
-
-승인 bundle 양식: `contracts/bundles/gate1-bundle.template.yaml` (서명 불가 템플릿).
-
-## Skill
-
-`.claude/skills/` — `scope-measure`, `build-cpld` 작성 완료.
-`scan-jtag`, `program-cpld-sram`, `measure-gate1-gpio`, `datasheet-research`,
-`pcb-validation`, `report` 미작성.
-
-`cpld-build-flash`라는 이름은 쓰지 않는다. Gate 1은 nonvolatile Flash가
-금지돼 있고 SRAM Program만 허용되므로, 이름 하나가 그 구분을 무너뜨린다.
-
-지터 측정과 지연 측정은 스코프 설정이 다르다. 이 부분을 고정 API로 얼리면
-새 측정을 할 때마다 맞지 않는 옵션과 싸우게 된다. 대신 매번 새로 짜되,
-**고정 계층을 거치므로 안전 한계와 명령 기록은 빠뜨릴 수 없다.**
-
-단, "적당한 양의 데이터"는 판단해도 되지만 **결과에는 숫자로 남아야 한다.**
-N, 샘플레이트, 측정 방식이 `measurements`에 없으면 같은 값을 두 번 못 낸다.
-
-## 계약
-
-| 파일 | 내용 |
-|---|---|
-| `contracts/board-map.yaml` | 보드의 실제 부품·핀·전압과 그 근거 |
-| `contracts/gate1-test-spec.yaml` | 허용/금지 작업, 통과 조건, 중지 조건 |
-
-미확정 값(`UNVERIFIED`, `null`)이 있으면 그 값에 의존하는 Tool이 **스스로 거부한다.**
-모델이 추측하지 않는다. TQFP144 핀을 잘못 찌르는 것보다 멈추는 게 싸다.
-
-## 현재 상태 (2026-08-14)
-
-**검증 완료**
-
-- 스코프 자체점검 6회 연속 PASS (N=200 3회, N=50 3회). 요청 count와 실제 count 정확히 일치.
-  주파수 평균 999.84 Hz, 계약 기준 1000 Hz ±1%.
-- Gate 1 CPLD 빌드 3회 연속 PASS. `dbg0` → pin 117, LVCMOS33, 4 mA, SLOW.
-  사용자 I/O 1개, DRC 0, timing 0, design hash 3회 동일.
-- 테스트 71개 통과 (하드웨어 불필요)
-
-**보드는 아직 만지지 않았다**
-
-`allow_hardware=False`가 기본값이고, `GATE1_REVIEW.md` 체크리스트 10개가 전부 미확인이다.
-JTAG scan, SRAM program, GPIO 구동은 코드가 막고 있다.
-
-**미해결**
-
-- OSCH 정확도 — MachXO2 데이터시트 필요. 해결 전까지 주파수 허용오차를 정하지 않는다.
-  Gate 1은 "반복 토글"만 판정한다 (`waveform_must_toggle`).
-- pin 117 probing 접근 방법 미확정
+지식맵의 프로젝트 필터에서 기록을 골라 전체 본문·코드·구현 파일·검증 결과·출처와
+원본 기록을 확인할 수 있습니다. 저장되지 않은 과거 세부 내용은 만들어 표시하지 않습니다.
+아래 RTASE 설명은 포함된 하드웨어 예제의 동작입니다.
 
 ## 실행
 
+PowerShell 실행 명령은 [webui/RUNNING.md](webui/RUNNING.md)에 정리되어 있습니다.
+프론트엔드 소스를 바꾼 경우에만 다음 빌드를 다시 실행합니다.
+
 ```powershell
-py -3 -m pytest QKD_PROJ/tests -q
+cd C:\KIST\QKD_PROJ\webui\frontend
+npm.cmd run build
 ```
 
-`runs/`는 gitignore 대상이다. 아티팩트 원본은 남기지 않고 manifest의 해시로 추적한다.
+Python 코드를 바꾼 뒤에는 데몬을 재시작합니다. 웹 백엔드를 바꿨으면 웹 서버도
+재시작합니다. 휴대폰 화면에 프론트 변경을 반영하려면 Cloudflare Pages를 재배포합니다.
+
+## BBB 자격 증명
+
+BBB endpoint는 `192.168.50.2 / xilinx / 22`로 등록되어 있으며 실제 호출 전에 장비
+모델을 확인합니다. 비밀번호는 파일이나 프롬프트에 저장하지 않습니다. Windows 자격
+증명 저장소에 한 번 저장하려면 다음 명령을 실행합니다.
+
+```powershell
+py -3 -m QKD_PROJ.hwtools.local_credentials set --host 192.168.50.2 --user xilinx --port 22
+```
+
+일회성 환경변수를 쓰려면 데몬을 실행할 같은 PowerShell 창에서 입력합니다.
+
+```powershell
+$bbbPassword = Read-Host 'BBB SSH 비밀번호' -AsSecureString
+$env:BB_PW = [System.Net.NetworkCredential]::new('', $bbbPassword).Password
+Remove-Variable bbbPassword
+```
+
+## 주요 폴더
+
+| 위치 | 내용 |
+|---|---|
+| `orchestrator/conversation_flow.py` | 현재 Lead, Builder, Verifier 지침과 대화 흐름 |
+| `agents/` | 현재 안내와 과거 실행 방식의 역할 정의 |
+| `orchestrator/` | 데몬, 대화 흐름, 원장, 장비 실행 연결 |
+| `boards/<board>/<revision>/` | 보드 개발 정보와 설치된 하드웨어 프로필 |
+| `hwtools/`, `mcp_server/` | 장비 드라이버와 구조화된 실행 기록 |
+| `workspaces/` | job별 격리 작업 사본 |
+| `runs/` | 장비 실행 증거와 지식 DB |
+| `candidates/` | 해시로 고정된 프로그램 이미지와 빌드 산출물 |
+| `references/` | 수집한 자료 |
+| `webui/` | 로컬/휴대폰 UI와 백엔드 |
+| `tests/` | 장비에 접촉하지 않는 자동 검증 |
+
+`runs/`, `candidates/`, `references/`, `workspaces/`, `webui/state/`와 SQLite 파일은
+운영 데이터이므로 일괄 삭제하지 않습니다. 과거 구현 기록은 현재 권한이나 장비 상태의
+근거로 사용하지 않습니다.
+
+- [현재 단일 흐름](docs/unified-scenario-flow.md)
+- [다른 보드 지원 설계](docs/board-independent-development.md)
+- [Windows 실행 안내](webui/RUNNING.md)
+- [구현 상태](STATUS.md)
