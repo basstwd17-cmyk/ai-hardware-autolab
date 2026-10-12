@@ -19,23 +19,22 @@
 
 ### 1. 설치
 
-~~~powershell
-git clone https://github.com/basstwd17-cmyk/ai-hardware-autolab.git
-cd ai-hardware-autolab
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r QKD_PROJ\requirements.txt
+플랫폼을 설치할 폴더 이름은 원하는 이름으로 지정합니다. 아래에서 my-agent-platform을 각자의 이름으로 바꾸세요. 설치 스크립트가 현재 설치 위치를 기준으로 Python 환경과 웹 화면을 준비합니다.
 
-cd QKD_PROJ\webui\frontend
-npm.cmd ci
-npm.cmd run build
-cd ..\..\..
+~~~powershell
+$platformName = 'my-agent-platform'
+git clone https://github.com/basstwd17-cmyk/ai-hardware-autolab.git $platformName
+Set-Location -LiteralPath $platformName
+.\scripts\setup-platform.ps1
 ~~~
+
+Python 실행 파일을 별도로 지정하려면 setup-platform.ps1에 -PythonCommand 'C:\Python311\python.exe'를 전달합니다. 웹 화면만 다시 준비할 때는 -SkipPython을 사용합니다.
 
 ### 2. 개발할 프로젝트 준비
 
 기존 소스 폴더를 그대로 사용합니다. Git 저장소의 최상위 폴더와 첫 커밋이 필요합니다. 소스가 없다면 새 프로젝트 폴더를 만들고 README 등 필요한 파일을 첫 커밋으로 저장하세요. 토큰·실험 원본·대용량 산출물은 대상 프로젝트의 .gitignore에 지정합니다.
 
-플랫폼을 설치한 폴더와 개발 대상은 별개입니다. 예를 들어 플랫폼은 C:/Tools/ai-hardware-autolab, 개발 소스는 C:/Research/my-analysis에 둘 수 있습니다.
+플랫폼을 설치한 폴더와 개발 대상은 별개입니다. 예를 들어 플랫폼은 C:/Tools/my-agent-platform, 개발 소스는 C:/Research/my-analysis에 둘 수 있습니다. 개발 대상 폴더 이름과 화면에 표시할 프로젝트 이름도 각자 정합니다.
 
 ### 3. 실행 — PowerShell 창 두 개
 
@@ -43,7 +42,8 @@ cd ..\..\..
 
 ~~~powershell
 # 창 1: 개발 대상 프로젝트를 연결한 데몬
-.\scripts\run-platform.ps1 -Component daemon -ProjectRoot 'C:\Research\my-analysis'
+$projectRoot = 'C:\Research\my-analysis' # 각자의 개발 소스 경로
+.\scripts\run-platform.ps1 -Component daemon -ProjectRoot $projectRoot
 
 # 창 2: 로컬 웹 화면
 .\scripts\run-platform.ps1 -Component web
@@ -95,6 +95,7 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 | QKD_PROJ/knowledge/ | 지식 저장·검색·자동 적재 |
 | QKD_PROJ/webui/ | React 화면, 로컬 웹 서버, 선택적 Cloudflare 연결 |
 | scripts/run-platform.ps1 | 자기 프로젝트를 연결하는 공유용 실행기 |
+| scripts/setup-platform.ps1 | 설치 폴더 이름과 위치를 자동으로 찾는 설치기 |
 | QKD_PROJ/tests/ | 장비·유료 모델을 호출하지 않는 회귀 검증 |
 
 이전 계약/Campaign 관련 파일은 과거 구현·호환 자료입니다. 신규 시나리오 실행의 필수 조건이 아닙니다.
@@ -105,6 +106,8 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 - [현재 구현 상태와 검증 범위](QKD_PROJ/STATUS.md)
 - [모델 선택](QKD_PROJ/docs/model-selection.md)
 - [선택적 원격 배포](QKD_PROJ/webui/cloudflare/README.md)
+
+개발자를 위한 내부 검증 명령입니다. 일반 사용자는 위 설치·실행 스크립트만 사용하면 됩니다. QKD_PROJ는 플랫폼의 고정 Python 패키지 이름으로, 개발 대상 프로젝트의 이름이 아닙니다. 이 내부 폴더는 변경하지 않습니다.
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m pytest QKD_PROJ/tests/test_projects.py QKD_PROJ/tests/test_conversation_service.py QKD_PROJ/tests/test_conversation_ingestion.py -q

@@ -14,7 +14,7 @@ try {
     if ($Component -eq 'web') {
         $staticPath = Join-Path $platformRoot 'QKD_PROJ\webui\frontend\dist'
         if (-not (Test-Path -LiteralPath (Join-Path $staticPath 'index.html'))) {
-            throw 'Build the frontend first: cd QKD_PROJ/webui/frontend; npm.cmd ci; npm.cmd run build'
+            throw 'Set up the platform first: .\scripts\setup-platform.ps1'
         }
         & $pythonCommand -m QKD_PROJ.webui.backend.app --daemon $Pipe --static $staticPath
     } else {
