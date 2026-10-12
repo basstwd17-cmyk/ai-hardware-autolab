@@ -91,31 +91,31 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 
 | 위치 | 내용 |
 |---|---|
-| QKD_PROJ/orchestrator/ | 프로젝트 연결, 3개 역할 실행, 원장·데몬·작업공간 |
-| QKD_PROJ/knowledge/ | 지식 저장·검색·자동 적재 |
-| QKD_PROJ/webui/ | React 화면, 로컬 웹 서버, 선택적 Cloudflare 연결 |
+| ai_hardware_autolab/orchestrator/ | 프로젝트 연결, 3개 역할 실행, 원장·데몬·작업공간 |
+| ai_hardware_autolab/knowledge/ | 지식 저장·검색·자동 적재 |
+| ai_hardware_autolab/webui/ | React 화면, 로컬 웹 서버, 선택적 Cloudflare 연결 |
 | scripts/run-platform.ps1 | 자기 프로젝트를 연결하는 공유용 실행기 |
 | scripts/setup-platform.ps1 | 설치 폴더 이름과 위치를 자동으로 찾는 설치기 |
-| QKD_PROJ/tests/ | 장비·유료 모델을 호출하지 않는 회귀 검증 |
+| ai_hardware_autolab/tests/ | 장비·유료 모델을 호출하지 않는 회귀 검증 |
 
 이전 계약/Campaign 관련 파일은 과거 구현·호환 자료입니다. 신규 시나리오 실행의 필수 조건이 아닙니다.
 
 ## 문서와 검증
 
-- [프로젝트 개발 안내](QKD_PROJ/docs/project-development.md)
-- [현재 구현 상태와 검증 범위](QKD_PROJ/STATUS.md)
-- [모델 선택](QKD_PROJ/docs/model-selection.md)
-- [선택적 원격 배포](QKD_PROJ/webui/cloudflare/README.md)
+- [프로젝트 개발 안내](ai_hardware_autolab/docs/project-development.md)
+- [현재 구현 상태와 검증 범위](ai_hardware_autolab/STATUS.md)
+- [모델 선택](ai_hardware_autolab/docs/model-selection.md)
+- [선택적 원격 배포](ai_hardware_autolab/webui/cloudflare/README.md)
 
-개발자를 위한 내부 검증 명령입니다. 일반 사용자는 위 설치·실행 스크립트만 사용하면 됩니다. QKD_PROJ는 플랫폼의 고정 Python 패키지 이름으로, 개발 대상 프로젝트의 이름이 아닙니다. 이 내부 폴더는 변경하지 않습니다.
+개발자를 위한 내부 검증 명령입니다. 일반 사용자는 위 설치·실행 스크립트만 사용하면 됩니다. ai_hardware_autolab은 플랫폼의 Python 패키지 이름입니다. 설치 폴더와 개발 프로젝트의 이름은 별도로 자유롭게 정합니다.
 
 ~~~powershell
-.\.venv\Scripts\python.exe -m pytest QKD_PROJ/tests/test_projects.py QKD_PROJ/tests/test_conversation_service.py QKD_PROJ/tests/test_conversation_ingestion.py -q
-cd QKD_PROJ/webui/frontend
+.\.venv\Scripts\python.exe -m pytest ai_hardware_autolab/tests/test_projects.py ai_hardware_autolab/tests/test_conversation_service.py ai_hardware_autolab/tests/test_conversation_ingestion.py -q
+cd ai_hardware_autolab/webui/frontend
 npm.cmd test
 npm.cmd run build
 ~~~
 
 실행 DB, 등록한 개인 프로젝트 경로, 작업공간, 세션 토큰, 계정별 Cloudflare 설정과 신규 실행 결과는 각 PC의 운영 데이터입니다. 저장소에 커밋하거나 일괄 삭제하지 않습니다. 기존 연구실 지식 DB는 소스 clone에 자동으로 포함되지 않습니다.
 
-제3자 에셋의 출처·라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)와 QKD_PROJ/webui/assets/MANIFEST.json을 참고하세요.
+제3자 에셋의 출처·라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)와 ai_hardware_autolab/webui/assets/MANIFEST.json을 참고하세요.

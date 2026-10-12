@@ -1,1 +1,0 @@
-ScpiError: SCPI error queue not empty during Gate 10 channel configuration: -200,"Execution error",-410,"Query INTERRUPTED"

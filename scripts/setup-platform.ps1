@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $platformRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $venvPython = Join-Path $platformRoot '.venv\Scripts\python.exe'
-$requirementsPath = Join-Path $platformRoot 'QKD_PROJ\requirements.txt'
-$frontendPath = Join-Path $platformRoot 'QKD_PROJ\webui\frontend'
+$requirementsPath = Join-Path $platformRoot 'ai_hardware_autolab\requirements.txt'
+$frontendPath = Join-Path $platformRoot 'ai_hardware_autolab\webui\frontend'
 
 function Invoke-SetupCommand {
     param([string]$Command, [string[]]$Arguments)

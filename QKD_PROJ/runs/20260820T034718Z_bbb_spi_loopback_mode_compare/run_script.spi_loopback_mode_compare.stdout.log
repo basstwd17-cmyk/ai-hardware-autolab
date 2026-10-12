@@ -1,4 +1,0 @@
-entry mode=0 bits=8 speed_hz=1000000
-mode=0 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000
-mode=1 tx=00ffaa553cc3 matches=0/64 rx_distinct=000000000000
-restored mode=0 bits=8 speed_hz=1000000

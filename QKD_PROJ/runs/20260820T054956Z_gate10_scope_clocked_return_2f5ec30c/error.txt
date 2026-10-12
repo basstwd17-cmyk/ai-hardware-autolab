@@ -1,1 +1,0 @@
-RuntimeError: captured only 0 SCLK rising edges inside CS low

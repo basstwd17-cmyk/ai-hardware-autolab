@@ -3,9 +3,9 @@
 * text=auto eol=lf
 
 # Evidence and signed candidates must retain their exact reviewed bytes.
-QKD_PROJ/candidates/** -text
-QKD_PROJ/runs/** -text
-QKD_PROJ/contracts/*.xcf -text
+ai_hardware_autolab/candidates/** -text
+ai_hardware_autolab/runs/** -text
+ai_hardware_autolab/contracts/*.xcf -text
 *.bit -text
 *.pad -text
 *.log -text

@@ -1,1 +1,0 @@
-{"gpio_input_verdict": "LOW_OR_UNSTABLE", "high_samples": 0, "ok": true, "samples": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "test": "gate4 CS=0 MOSI=1 -> expect P9_21 GPIO0_3=1", "total_samples": 32}

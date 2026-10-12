@@ -12,15 +12,15 @@ $pythonCommand = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { 
 Push-Location -LiteralPath $platformRoot
 try {
     if ($Component -eq 'web') {
-        $staticPath = Join-Path $platformRoot 'QKD_PROJ\webui\frontend\dist'
+        $staticPath = Join-Path $platformRoot 'ai_hardware_autolab\webui\frontend\dist'
         if (-not (Test-Path -LiteralPath (Join-Path $staticPath 'index.html'))) {
             throw 'Set up the platform first: .\scripts\setup-platform.ps1'
         }
-        & $pythonCommand -m QKD_PROJ.webui.backend.app --daemon $Pipe --static $staticPath
+        & $pythonCommand -m ai_hardware_autolab.webui.backend.app --daemon $Pipe --static $staticPath
     } else {
         if (-not $ProjectRoot) { throw 'Pass -ProjectRoot with the Git checkout you want to develop.' }
         $sourceRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
-        $daemonArguments = @('-m', 'QKD_PROJ.orchestrator', '--project-root', $sourceRoot, '--ledger', 'QKD_PROJ/webui/state/web-jobs.db', '--runs', 'QKD_PROJ/runs', '--knowledge-db', 'QKD_PROJ/runs/knowledge.db', '--profile', $Profile, '--pipe', $Pipe)
+        $daemonArguments = @('-m', 'ai_hardware_autolab.orchestrator', '--project-root', $sourceRoot, '--ledger', 'ai_hardware_autolab/webui/state/web-jobs.db', '--runs', 'ai_hardware_autolab/runs', '--knowledge-db', 'ai_hardware_autolab/runs/knowledge.db', '--profile', $Profile, '--pipe', $Pipe)
         if ($ProjectId) { $daemonArguments += @('--knowledge-project', $ProjectId) }
         & $pythonCommand @daemonArguments
     }

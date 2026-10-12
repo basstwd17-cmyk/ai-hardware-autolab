@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/p9_21_gpio_loopback_probe.py", line 128, in <module>
-    main()
-    ~~~~^^
-  File "/tmp/p9_21_gpio_loopback_probe.py", line 78, in main
-    raise RuntimeError(f"refusing unexpected SPI padmux: {before['pads']}")
-RuntimeError: refusing unexpected SPI padmux: {'cs': 0, 'mosi': 0, 'miso': 0}

@@ -1,79 +1,42 @@
-# Python
+# Dependencies and generated output
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.pytest-work/
-.mypy_cache/
-.ruff_cache/
 .venv/
 venv/
-
-# Node / frontend
 node_modules/
 dist/
 *.tsbuildinfo
-
-# Runtime state and durable local ledgers
-QKD_PROJ/webui/state/
-*.db
-*.db-wal
-*.db-shm
-*.lock
-*.pid
-
-# Cloudflare machine/account configuration
-.wrangler/
-.dev.vars
-.dev.vars.*
-wrangler.jsonc
-
-# Generated hardware and diagnostic output
+.pytest_cache/
+.pytest-work/
+.test*/
 build/
 Debug/
 Release/
-*.bit
-*.jed
-*.pad
 *.log
 *.err
-*.tgz
-*.tar.gz
+*.lock
+*.pid
 
-# Local test and scratch data
-.test-tmp*/
-reference-smoke*/
-test-run-*/
-tmp/
-BeagleBone-Black/archive_pulse_io_verification/backups/
-BeagleBone-Black/archive_pulse_io_verification/results/
+# Per-installation data, credentials and preserved local history
+ai_hardware_autolab/runs/
+ai_hardware_autolab/workspaces/
+ai_hardware_autolab/references/
+ai_hardware_autolab/candidates/
+ai_hardware_autolab/contracts/
+ai_hardware_autolab/tmp/
+ai_hardware_autolab/webui/state/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+.wrangler/
+.dev.vars*
+wrangler.jsonc
 
-# User/reference material kept outside the source snapshot
-QKD_PROJ/references/
-*.pdf
-
-# Contract-pinned artifacts and evidence are source-of-truth inputs, not
-# disposable build output. They remain reviewable and hash-checkable.
-!QKD_PROJ/candidates/**/*.bit
-!QKD_PROJ/candidates/**/*.jed
-!QKD_PROJ/candidates/**/*.pad
-!QKD_PROJ/candidates/**/*.log
-!QKD_PROJ/runs/**/*.log
-!QKD_PROJ/tests/fixtures/*.log
-!QKD_PROJ/RTASE_V1_Schematic1_2026-08-13.pdf
-
-# Editors and OS
+# Editor state
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-
-# Researcher project connections and new local runtime stores
-.env
-.env.*
-!.env.example
-QKD_PROJ/webui/state/
-QKD_PROJ/workspaces/
-QKD_PROJ/runs/
-QKD_PROJ/.test*/
-QKD_PROJ/.pytest*/
-QKD_PROJ/boards/local/

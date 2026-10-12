@@ -1,5 +1,0 @@
-// Direct reverse data-path test: only U2 pins 33 and 31 are used.
-LOCATE COMP "spi_from_bbb_d0" SITE "33";
-IOBUF PORT "spi_from_bbb_d0" IO_TYPE=LVCMOS33;
-LOCATE COMP "spi_to_bbb_d1" SITE "31";
-IOBUF PORT "spi_to_bbb_d1" IO_TYPE=LVCMOS33 DRIVE=4 SLEWRATE=SLOW;
