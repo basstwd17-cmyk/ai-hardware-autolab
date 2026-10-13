@@ -23,7 +23,7 @@
 
 ~~~powershell
 $platformName = 'my-agent-platform'
-git clone https://github.com/basstwd17-cmyk/ai-hardware-autolab.git $platformName
+git clone --depth 1 https://github.com/basstwd17-cmyk/ai-hardware-autolab.git $platformName
 Set-Location -LiteralPath $platformName
 .\scripts\setup-platform.ps1
 ~~~
@@ -107,7 +107,7 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 - [모델 선택](ai_hardware_autolab/docs/model-selection.md)
 - [선택적 원격 배포](ai_hardware_autolab/webui/cloudflare/README.md)
 
-2026-10-13 공유판 검증: 필요한 파일만 복사한 독립 설치에서 Python 회귀 339개를 검사하고, 마지막 수정의 영향 범위 22개를 다시 통과했습니다. 프런트엔드 140개, Cloudflare 지식 동기화 3개, TypeScript/Vite 빌드, 데몬 dry-run 시작과 실행기 구문 검사를 통과했습니다. 유료 모델·실장비는 호출하지 않았습니다.
+2026-10-13 공유판 검증: 필요한 파일만 복사한 독립 설치에서 삭제 적용 후 Python 전체 회귀 339개가 통과했습니다. 프런트엔드 140개, Cloudflare 지식 동기화 3개, TypeScript/Vite 빌드, 데몬 dry-run 시작과 실행기 구문 검사를 통과했습니다. 유료 모델·실장비는 호출하지 않았습니다.
 
 개발자를 위한 내부 검증 명령입니다. 일반 사용자는 위 설치·실행 스크립트만 사용하면 됩니다. ai_hardware_autolab은 플랫폼의 Python 패키지 이름입니다. 설치 폴더와 개발 프로젝트의 이름은 별도로 자유롭게 정합니다.
 
