@@ -1,9 +1,6 @@
 const COMMAND_KINDS = new Set([
   'mission.start',
   'approval.decide',
-  'campaign.bundle.preview',
-  'campaign.bundle.approve',
-  'job.mission.revise',
   'job.steer',
   'job.cancel',
 ])

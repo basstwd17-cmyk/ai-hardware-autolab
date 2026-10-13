@@ -1,21 +1,12 @@
-# AI Hardware Autolab source navigation
+# Platform development guide
 
-Read README.md and STATUS.md before broad exploration.
-Current execution is orchestrator/conversation_flow.py, conversation_codex.py
-and conversation_service.py: Lead → Builder → Verifier.
+Read README.md and STATUS.md first.
 
-- The selected project's source and user scenario define the work.
-- New jobs do not require execution contracts, compiled Plans or Campaigns.
-- ProjectRegistry and ProjectWorkspaces in orchestrator/projects.py pin each
-  job's project settings and develop its source in an isolated Git workspace.
-- Preserve original source, active job workspaces, SQLite state and knowledge.
-  Do not run git clean -fdX. Shared runtime stores are not source packages.
-- Generic jobs have no default board, lab IP, device or vendor toolchain.
-- Agent messages carry design intent, artifacts, concrete checks and sources.
-- Stored agent notes stay unverified; verify references before reusing as facts.
-- Keep package imports and project-relative paths consistent with
-  ai_hardware_autolab. Do not recursively search other job workspaces/runs.
-- Native optional driver interfaces remain internal extension points. No
-  hardware example or external board repository is required for normal startup.
-- Historical modules and documents are compatibility/reference material, not
-  requirements for connecting a new project. Check consumers before removal.
+- Current execution: orchestrator/conversation_flow.py, conversation_codex.py and conversation_service.py.
+- The selected project and user scenario define the work. Lead → Builder → Verifier exchange messages and actual artifacts.
+- ProjectRegistry and ProjectWorkspaces pin project settings and keep source changes in isolated Git workspaces.
+- New jobs have no execution contracts, Campaigns or installed board adapters.
+- Preserve original project source, active workspaces, SQLite state and knowledge. Do not run git clean -fdX.
+- Agent notes remain unverified. Cite actual sources and check evidence before reusing as facts.
+- Keep platform imports self-contained. Do not scan all runs or another project's workspaces.
+- Test project separation, scheduling, feedback/cancellation, model transport, artifact access and knowledge ingestion with temporary projects and mock models.

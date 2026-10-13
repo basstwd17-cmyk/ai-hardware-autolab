@@ -38,7 +38,7 @@ def test_hardware_mode_not_adopted_by_offline_prototype(setup):
     })
     def never(*args):
         pytest.fail("offline prototype must not invoke a hardware runtime")
-    with pytest.raises(ValueError, match="live hardware adapter"):
+    with pytest.raises(ValueError, match="unsupported execution mode"):
         ConversationFlow(ledger, never).advance(job.job_id)
     assert ledger.job(job.job_id).state == "pending"
 

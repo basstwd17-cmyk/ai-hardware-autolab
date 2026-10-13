@@ -10,7 +10,7 @@ it('offers a project source and build/test guidance without a board requirement'
 it('an offline daemon opens general development without hardware setup controls',()=>{
  const platform={connection:{daemon:{profile:'offline'}},api:null} as Platform
  const html=renderToStaticMarkup(<StartView platform={platform}/>)
- expect(html).toContain('<option value="offline" selected="">')
+ expect(html).toContain('격리된 작업공간')
  expect(html).toContain('이번 작업의 프로젝트')
  expect(html).not.toContain('연결된 USB·시리얼 장치 찾기')
 })

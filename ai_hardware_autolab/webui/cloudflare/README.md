@@ -1,6 +1,6 @@
 # Cloudflare Pages remote control
 
-This deploys the mobile RTASE control surface to a stable `pages.dev` URL.
+This deploys the remote project control surface to a stable `pages.dev` URL.
 Pages Functions and D1 are a command mailbox. They never run an agent and do
 not become the source of truth: the local Python relay sends every command to
 the existing named-pipe daemon, and the local SQLite ledger remains decisive.
@@ -18,8 +18,7 @@ without model/device calls. Offline views show the last synchronization state.
 
 - outbound: compact job state, path-free result/evidence cards, pending approval
   details and ledger cursor;
-- inbound: one allowlisted command (`mission.start`, campaign preview/approve,
-  pending approval accept/decline, mission revision, steer or cancel);
+- inbound: one allowlisted command (`mission.start`, pending approval accept/decline, steer or cancel);
 - never: arbitrary shell commands, MCP calls, login files or
   the local web session token.
 

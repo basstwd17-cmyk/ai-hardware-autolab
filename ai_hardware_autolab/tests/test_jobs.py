@@ -430,27 +430,12 @@ def test_expiring_twice_is_harmless(ledger, job):
 
 
 def _reduce(tmp_path, expect, run_present=True):
-    from ai_hardware_autolab.orchestrator.evidence import reduce_gate
-
-    runs = tmp_path / "runs"
-    runs.mkdir(exist_ok=True)
-    if run_present:
-        directory = runs / "20260101T000000Z_r"
-        directory.mkdir(exist_ok=True)
-        (directory / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "verdict": "PASS",
-                    "steps": [{"tool": "t", "action": "a", "measurements": {"v": 3}}],
-                }
-            ),
-            encoding="utf-8",
-        )
-    return reduce_gate(
-        "g.yaml",
-        [{"field": "measurements.v", "expect": expect, "source": "c", "run": "20260101T000000Z_r"}],
-        runs_dir=runs,
-    )
+    # Explicit upstream data: these tests exercise ledger preservation, not a retired gate reducer.
+    from types import SimpleNamespace
+    outcome='primary_run_missing' if not run_present else 'satisfied' if expect==3 else 'open'
+    payload={'outcome':outcome,'conditions':[{'observed':3 if run_present else None}],
+             'failure_signature':None if outcome=='satisfied' else 'same-observed-failure'}
+    return SimpleNamespace(describe=lambda:dict(payload),failure_signature=payload['failure_signature'])
 
 
 def test_a_reduction_becomes_the_verdict_without_being_retyped(ledger, job, tmp_path):

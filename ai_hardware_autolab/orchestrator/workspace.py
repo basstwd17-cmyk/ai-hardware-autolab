@@ -309,19 +309,6 @@ class WorkspaceManager:
             changes = audit.get("changes")
             if not isinstance(changes, list):
                 raise WorkspaceError("workspace audit has no changed-file list")
-            if any(
-                isinstance(entry, dict)
-                and str(entry.get("path") or "").startswith("ai_hardware_autolab/boards/")
-                for entry in changes
-            ):
-                try:
-                    from ai_hardware_autolab.boards.profiles import BoardCatalog, BoardProfileError
-
-                    BoardCatalog.load_default(workspace)
-                except BoardProfileError as exc:
-                    raise WorkspaceError(
-                        f"refusing to publish an invalid board profile: {exc}"
-                    ) from exc
             prepared: list[tuple[Path, Path, str | None, str | None]] = []
             conflicts: list[str] = []
             for entry in changes:
@@ -669,11 +656,12 @@ class WorkspaceManager:
                 "stderr": subprocess.PIPE,
                 "text": text,
                 "check": True,
+                "timeout": 60,
             }
             if text:
                 kwargs.update({"encoding": "utf-8", "errors": "strict"})
             return subprocess.run(["git", "-c", "maintenance.auto=false", "-c", "gc.auto=0", *args], **kwargs)
-        except (OSError, subprocess.CalledProcessError) as exc:
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             detail = ""
             if isinstance(exc, subprocess.CalledProcessError):
                 raw = exc.stderr

@@ -98,7 +98,7 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 | scripts/setup-platform.ps1 | 설치 폴더 이름과 위치를 자동으로 찾는 설치기 |
 | ai_hardware_autolab/tests/ | 장비·유료 모델을 호출하지 않는 회귀 검증 |
 
-이전 계약/Campaign 관련 파일은 과거 구현·호환 자료입니다. 신규 시나리오 실행의 필수 조건이 아닙니다.
+내장 보드 드라이버, 계약/Campaign 실행기, 과거 연구실 자료는 포함하지 않습니다. 개발 대상 프로젝트의 도구와 외부 서비스는 각 프로젝트 안내에 명시합니다.
 
 ## 문서와 검증
 
@@ -107,10 +107,13 @@ Cloudflare 배포는 선택 사항입니다. 각 연구원의 D1/토큰/릴레�
 - [모델 선택](ai_hardware_autolab/docs/model-selection.md)
 - [선택적 원격 배포](ai_hardware_autolab/webui/cloudflare/README.md)
 
+2026-10-13 공유판 검증: 필요한 파일만 복사한 독립 설치에서 Python 회귀 339개를 검사하고, 마지막 수정의 영향 범위 22개를 다시 통과했습니다. 프런트엔드 140개, Cloudflare 지식 동기화 3개, TypeScript/Vite 빌드, 데몬 dry-run 시작과 실행기 구문 검사를 통과했습니다. 유료 모델·실장비는 호출하지 않았습니다.
+
 개발자를 위한 내부 검증 명령입니다. 일반 사용자는 위 설치·실행 스크립트만 사용하면 됩니다. ai_hardware_autolab은 플랫폼의 Python 패키지 이름입니다. 설치 폴더와 개발 프로젝트의 이름은 별도로 자유롭게 정합니다.
 
 ~~~powershell
-.\.venv\Scripts\python.exe -m pytest ai_hardware_autolab/tests/test_projects.py ai_hardware_autolab/tests/test_conversation_service.py ai_hardware_autolab/tests/test_conversation_ingestion.py -q
+.\.venv\Scripts\python.exe -m pip install -r ai_hardware_autolab/requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest ai_hardware_autolab/tests -q
 cd ai_hardware_autolab/webui/frontend
 npm.cmd test
 npm.cmd run build

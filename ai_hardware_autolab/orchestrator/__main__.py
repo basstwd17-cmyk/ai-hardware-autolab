@@ -7,8 +7,7 @@
     py -3 -m ai_hardware_autolab.orchestrator mission "scenario"
     py -3 -m ai_hardware_autolab.orchestrator status
 
-Hardware calls within a submitted scenario use the installed device settings
-and run automatically. No per-scenario contract or Campaign is required.
+Projects use their own tools inside an isolated workspace.
 """
 
 from __future__ import annotations
@@ -29,13 +28,9 @@ from ai_hardware_autolab.orchestrator.workspace import WorkspaceManager, Workspa
 from ai_hardware_autolab.orchestrator.projects import ProjectRegistry, ProjectWorkspaces, project_description
 from ai_hardware_autolab.orchestrator.conversation_service import WebConversationFlow, WorkspaceConversationRuntime
 from ai_hardware_autolab.orchestrator.conversation_codex import ConversationCodexConfig
-from ai_hardware_autolab.orchestrator.conversation_hardware import ConversationHardwareConfig, SelectedHardwareExecutor
-from ai_hardware_autolab.boards.hardware import HardwareProfile, HardwareProfileError
-from ai_hardware_autolab.boards.registry import HardwareRegistry
 from ai_hardware_autolab.knowledge.models import KnowledgeScope, KnowledgeValidationError
 from ai_hardware_autolab.knowledge.store import KnowledgeStore, KnowledgeStoreError
 from ai_hardware_autolab.knowledge.retriever import KnowledgeRetriever
-from ai_hardware_autolab.capabilities.catalog import CapabilityCatalog, CapabilityCatalogError
 
 PLATFORM_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = PLATFORM_ROOT / "runs" / "jobs.db"
@@ -45,24 +40,6 @@ DEFAULT_WORKSPACES = PLATFORM_ROOT / "workspaces"
 DEFAULT_PROFILE = "offline"
 
 
-def _load_reuse_catalog(project_root: Path) -> CapabilityCatalog | None:
-    """A stale reuse hint must not discard unrelated, still-verified entries."""
-    try:
-        catalog = CapabilityCatalog.load_default(project_root, allow_partial=True)
-    except (CapabilityCatalogError, OSError) as exc:
-        # Reuse evidence is advisory. Never certify changed bytes by updating
-        # their hash automatically, and never prevent unrelated development.
-        print(f"[reuse catalog unavailable] {exc}; continue without verified reuse hints", file=sys.stderr)
-        return None
-    for identifier, reason in catalog.withheld:
-        print(f"[reuse item withheld] {identifier}: {reason}", file=sys.stderr)
-    if catalog.withheld:
-        print(
-            f"[reuse catalog] {len(catalog.capabilities)} verified entries retained; "
-            f"{len(catalog.withheld)} withheld (recorded hashes not modified)",
-            file=sys.stderr,
-        )
-    return catalog
 
 
 def _approval_mode(profile: str) -> str:
@@ -84,16 +61,6 @@ def build_service(args: argparse.Namespace) -> tuple[S.Service, None]:
     project_id = str(getattr(args, "knowledge_project", "") or
                      (project_description(project_root)["project_id"] if getattr(args, "project_root", "") else "ai-hardware-autolab"))
     ledger = JobLedger(Path(args.ledger))
-    board = str(getattr(args, "hardware_board", "") or "")
-    revision = str(getattr(args, "hardware_revision", "") or "")
-    if bool(board) != bool(revision):
-        raise ValueError("hardware board and revision must be supplied together")
-    hardware_registry = HardwareRegistry(PLATFORM_ROOT.parent, default=
-        {"board_id": board, "revision": revision} if board else None)
-    hardware_profile = None
-    if args.profile == "hardware":
-        hardware_profile = hardware_registry.resolve()
-
     knowledge_store = None
     knowledge_scope = None
     knowledge_retriever = None
@@ -116,16 +83,11 @@ def build_service(args: argparse.Namespace) -> tuple[S.Service, None]:
     base_manager = WorkspaceManager(Path(workspace_root), project_root=project_root,
                                     source_prefixes=None if project_root != PLATFORM_ROOT.parent else ("ai_hardware_autolab", "scripts"))
     manager = ProjectWorkspaces(base_manager, projects)
-    device_executor = SelectedHardwareExecutor(
-        ledger, hardware_registry,
-        ConversationHardwareConfig(project_root=PLATFORM_ROOT.parent, runs_dir=Path(args.runs)),
-    ) if args.profile == "hardware" else None
     runtime = WorkspaceConversationRuntime(
         ledger, manager, ConversationCodexConfig(manager.root), dry_run=args.dry_run,
         role_models={role: getattr(args, f"{role.replace('-', '_')}_model", None) or None
                      for role in ("lead-agent", "builder", "verifier")},
         knowledge_retriever=knowledge_retriever, knowledge_scope=knowledge_scope,
-        device_executor=device_executor,
     )
     conversation = WebConversationFlow(ledger, runtime, manager)
     workflows = WorkflowRouter(ledger, conversation=conversation)
@@ -141,10 +103,7 @@ def build_service(args: argparse.Namespace) -> tuple[S.Service, None]:
             runtime_profile=args.profile, workspace_mode="isolated",
         ),
         knowledge_store=knowledge_store, knowledge_scope=knowledge_scope,
-        hardware_profile=hardware_profile,
-        hardware_registry=hardware_registry,
         project_registry=projects,
-        hardware_executor=device_executor if not args.dry_run else None,
     )
     return service, None
 
@@ -179,9 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--knowledge-hardware", default="")
     parser.add_argument("--knowledge-revision", default="")
     parser.add_argument("--pipe", default=None, help=f"default {S.DEFAULT_PIPE}")
-    parser.add_argument("--profile", choices=("offline", "hardware"), default=DEFAULT_PROFILE)
-    parser.add_argument("--hardware-board", default="", help="default setup; each mission may choose another board")
-    parser.add_argument("--hardware-revision", default="", help="default hardware revision, independent of knowledge search")
+    parser.add_argument("--profile", choices=("offline",), default=DEFAULT_PROFILE)
     parser.add_argument("--lead-agent-model", default="", help="optional Codex model for Lead")
     parser.add_argument("--builder-model", default="", help="optional Codex model for Builder")
     parser.add_argument("--verifier-model", default="", help="optional Codex model for Verifier")
@@ -204,8 +161,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     mission.add_argument("scenario")
     mission.add_argument("--objective", default="")
-    mission.add_argument("--board", default="", help="registered board ID for this job")
-    mission.add_argument("--revision", default="", help="registered board revision for this job")
     mission.add_argument(
         "--search-policy",
         choices=("refresh", "always"),
@@ -242,9 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     del args.legacy_contracts
 
     if args.command == "mission":
-        if bool(args.board) != bool(args.revision):
-            parser.error("mission --board and --revision must be supplied together")
-        selected = {"hardware_selection": {"board_id": args.board, "revision": args.revision}} if args.board else {}
+        selected = {}
         try:
             preview_answer = S.send(
                 {"command": "preflight", "scenario": args.scenario, **selected},
@@ -310,7 +263,6 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         KnowledgeValidationError,
         KnowledgeStoreError,
-        HardwareProfileError,
         WorkspaceError,
     ) as exc:
         print(f"daemon refused: {exc}", file=sys.stderr)

@@ -47,12 +47,9 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from ai_hardware_autolab.knowledge.models import KnowledgeScope
-from ai_hardware_autolab.capabilities.catalog import CapabilityCatalog
-from ai_hardware_autolab.boards.profiles import BoardCatalog
 from ai_hardware_autolab.knowledge.store import KnowledgeStore
-from ai_hardware_autolab.hwtools.result import utc_now
+from ai_hardware_autolab.utils import utc_now
 from ai_hardware_autolab.orchestrator import daemon as D
-from ai_hardware_autolab.orchestrator.campaign import CampaignController
 from ai_hardware_autolab.orchestrator import scenario_preflight as P
 from ai_hardware_autolab.orchestrator import wire as W
 from ai_hardware_autolab.orchestrator.control import ControlPlane
@@ -868,7 +865,6 @@ class ServiceConfig:
     # still streams events; it just offers nothing to open.
     runs_dir: Path | None = None
     project_root: Path | None = None
-    contracts_dir: Path | None = None
     runtime_profile: str | None = None
     workspace_mode: str | None = None
 
@@ -886,14 +882,6 @@ class Service:
         now: Callable[[], str] = utc_now,
         knowledge_store: KnowledgeStore | None = None,
         knowledge_scope: KnowledgeScope | None = None,
-        campaign_controller: CampaignController | None = None,
-        capability_catalog: CapabilityCatalog | None = None,
-        board_catalog: BoardCatalog | None = None,
-        hardware_profile: Any | None = None,
-        hardware_connections: Any | None = None,
-        hardware_registry: Any | None = None,
-        hardware_executor: Any | None = None,
-        runtime_runner: Any | None = None,
         project_registry: Any | None = None,
     ) -> None:
         self.ledger = ledger
@@ -907,17 +895,9 @@ class Service:
             ledger,
             daemon,
             on_shutdown=self.stop,
-            preflight_engine=P.ScenarioPreflight(self.config.contracts_dir),
+            preflight_engine=P.ScenarioPreflight(),
             knowledge_store=knowledge_store,
             default_knowledge_scope=knowledge_scope,
-            campaign_controller=campaign_controller,
-            capability_catalog=capability_catalog,
-            board_catalog=board_catalog,
-            hardware_profile=hardware_profile,
-            hardware_connections=hardware_connections,
-            hardware_registry=hardware_registry,
-            hardware_executor=hardware_executor,
-            hardware_enabled=self.config.runtime_profile == "hardware",
             project_registry=project_registry,
         )
         self.knowledge_store = knowledge_store
@@ -925,8 +905,6 @@ class Service:
         from ai_hardware_autolab.knowledge.conversation_ingestor import ConversationKnowledgeIngestor
         self.knowledge_ingestor = (ConversationKnowledgeIngestor(ledger, knowledge_store, knowledge_scope)
                                    if knowledge_store is not None and knowledge_scope is not None else None)
-        self.campaign_controller = campaign_controller
-        self.runtime_runner = runtime_runner
         self.started_at: str | None = None
         self.ticks = 0
         self._server: threading.Thread | None = None
@@ -945,11 +923,6 @@ class Service:
         self.lock.acquire()
         self.started_at = self.now()
         recovered = self.daemon.recover()
-        campaign = (
-            self.campaign_controller.recover()
-            if self.campaign_controller is not None
-            else None
-        )
 
         if self.transport is None:
             self.transport = open_transport(self.config.pipe_name)
@@ -967,7 +940,6 @@ class Service:
             "started_at": self.started_at,
             "address": self.transport.address,
             "recovered": recovered,
-            "campaign": campaign,
             "cursor": self.ledger.latest_event_id(),
             "sid": getattr(self.transport, "sid", None),
             "knowledge_cursor": (
@@ -1012,7 +984,7 @@ class Service:
         """Best-effort runtime interruption; the ledger cancellation is authoritative."""
         conversation = getattr(self.daemon.loop, "conversation", None)
         owner = (conversation.runtime if conversation is not None and conversation.owns(job_id)
-                 else self.runtime_runner)
+                 else None)
         cancel = getattr(owner, "cancel", None)
         if not callable(cancel):
             return False
@@ -1143,12 +1115,8 @@ class _LockedControl:
         # These commands neither mutate the ledger nor grant a capability; the
         # ledger's own transactions give each a consistent read.
         if isinstance(request, dict) and request.get("command") in {
-            "ping", "status", "job", "handoffs", "events", "inbox", "models-list", "hardware-status", "hardware-catalog",
+            "ping", "status", "job", "handoffs", "events", "inbox", "models-list",
         }:
-            return self._control.handle(request)
-        # Starts a background identity check; the hardware adapter owns its
-        # device lock, so UI commands never wait for a model/programming turn.
-        if isinstance(request, dict) and request.get("command") in {"hardware-check", "hardware-discover", "hardware-register"}:
             return self._control.handle(request)
         if isinstance(request, dict) and request.get("command") == "cancel":
             job_id = str(request.get("job_id") or "")

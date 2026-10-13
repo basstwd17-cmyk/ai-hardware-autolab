@@ -1,22 +1,6 @@
-# Search defaults, not an access-control boundary. Opt in by exact path.
-/docs/history/
-/docs/20*.md
-/agents/codex/
-/agents/*.md
-!/agents/README.md
-/workspaces/
-/tmp/
-/.test-*/
-/.review-temp*/
-/reference-smoke*/
-/test-run-*/
-/**/build/
-/**/__pycache__/
-/**/.pytest_cache/
-/**/node_modules/
-/webui/frontend/dist/
-/webui/cloudflare/.wrangler/
-/webui/state/
-# Read evidence through bounded platform tools or an exact selected path.
-/runs/
-/references/
+runs/
+workspaces/
+webui/state/
+webui/frontend/node_modules/
+webui/frontend/dist/
+**/__pycache__/

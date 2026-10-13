@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_hardware_autolab.orchestrator.codex_runner import CodexRunnerError, StdioAppServer
+from ai_hardware_autolab.orchestrator.codex_transport import CodexRunnerError, StdioAppServer
 from ai_hardware_autolab.orchestrator.conversation_codex import (
     ConversationCodexConfig, ConversationCodexRuntime, live_client, server_command,
     ledger_event_sink, reply_schema,
@@ -264,58 +264,12 @@ def test_runtime_events_are_host_bound_and_deltas_not_persisted(env):
     assert events[0].agent == "builder" and events[0].payload["attempt_id"] == 42
 
 
-@pytest.mark.parametrize("role", ["lead", "builder", "verifier"])
-@pytest.mark.parametrize("tools", [(), ("run_bbb", "measure_scope"), ("check_connections", "run_bbb")])
-def test_all_role_schemas_use_closed_objects_and_nonempty_enums(role, tools):
-    def check(node):
-        if isinstance(node, dict):
-            if node.get("type") == "object":
-                assert node.get("additionalProperties") is False
-                assert set(node["required"]) == set(node["properties"])
-            if "enum" in node:
-                assert node["enum"]
-            for value in node.values():
-                check(value)
-        elif isinstance(node, list):
-            for value in node:
-                check(value)
-    schema = reply_schema(role, device_tools=tools)
-    check(schema)
-    if not tools or (role != "builder" and "check_connections" not in tools):
-        assert schema["properties"]["device_call"] == {"type": "null"}
-    elif role != "builder":
-        assert schema["properties"]["device_call"]["anyOf"][1]["properties"]["tool"]["enum"] == ['check_connections']
 
 
-@pytest.mark.parametrize('role', ['lead', 'verifier'])
-def test_nonbuilder_can_format_a_selective_connection_request(env, role):
-    runtime, calls, *_ = runner(env, [answer('device', device_call={
-        'tool': 'check_connections', 'arguments': '{"devices":["scope"]}'})])
-    context = dict(env[1], role=role, execution_mode='hardware', inputs={'device_tools': ['check_connections', 'run_bbb']})
-    reply = runtime(role, context)
-    assert reply['device_call'] == {'tool': 'check_connections', 'arguments': {'devices': ['scope']}}
-    assert len([c for c in calls if c[0] == 'turn']) == 1
 
 
-def test_device_arguments_decode_before_host_validation(env):
-    arguments = {"identity_only": True, "channels": [1, 2],
-                 "options": {"label": "SPI capture", "timeout": 2.5}, "optional": None}
-    runtime, calls, *_ = runner(env, [answer("device", device_call={
-        "tool": "run_bbb", "arguments": json.dumps(arguments)})])
-    context = dict(env[1], execution_mode="hardware", inputs={"device_tools": ["run_bbb"]})
-    reply = runtime("builder", context)
-    assert reply["device_call"] == {"tool": "run_bbb", "arguments": arguments}
-    assert len([c for c in calls if c[0] == "turn"]) == 1
 
 
-@pytest.mark.parametrize("arguments", ['{bad', '[]', 'null', '{"contract":"fake.yaml"}',
-                                        '{"record_name":"fake-run"}'])
-def test_invalid_encoded_arguments_get_only_text_repair(env, arguments):
-    runtime, calls, *_ = runner(env, [answer("device", device_call={
-        "tool": "run_bbb", "arguments": arguments}), answer("needs_user")])
-    context = dict(env[1], execution_mode="hardware", inputs={"device_tools": ["run_bbb"]})
-    assert runtime("builder", context)["status"] == "needs_user"
-    assert [c[2] for c in calls if c[0] == "turn"] == [False, True]
 
 
 def test_cli_create_and_status_do_not_launch_model(tmp_path, capsys):
@@ -340,3 +294,8 @@ def test_cancel_commits_before_runtime_interrupt_and_late_error_is_terminal(env)
     job = flow.create("Cancel example", workspace)
     assert flow.advance(job.job_id).done
     assert ledger.job(job.job_id).outcome == "cancelled"
+
+def test_removed_hardware_mode_is_refused_before_model_dispatch(env):
+    runtime,calls,*_=runner(env, [])
+    with pytest.raises(ValueError): runtime('builder',dict(env[1],execution_mode='hardware'))
+    assert calls==[]

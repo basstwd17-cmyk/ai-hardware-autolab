@@ -103,9 +103,6 @@ export function AgentsView({ platform }: { platform: Platform }) {
             disabled={selectedJob ? isFinished(selectedJob) : false}
             question={clarificationQuestion(selectedJob ? waitingOf(selectedJob) : null)}
           />
-          {selectedJob?.state === 'blocked' && <ResumeStep key={selected} jobId={selected} platform={platform}
-            reason={waitingOf(selectedJob)?.detail ?? String([...rows].reverse().find((row) => row.kind === 'job.blocked')?.payload?.reason ?? '')}
-            retryUsed={rows.some((row) => row.kind === 'plan.retry.requested' && row.payload?.iteration === transcript.job?.iteration)} />}
           <HandoffResults api={platform.api} jobId={selected} cursor={transcript.total} />
           <div className="thread">
             {feed.map((step, index) => (
@@ -759,47 +756,6 @@ function CancelJobButton({ jobId, platform }: { jobId: string; platform: Platfor
       <small>{message || '취소는 원장에 남고, 아직 실행되지 않은 단계와 남은 승인을 철회합니다.'}</small>
     </div>
   )
-}
-
-export function recoveryKind(reason: string): 'plan' | 'deployment' | 'other' {
-  if (reason.startsWith('plan_format:') || (reason.startsWith('runtime_failure: lead-agent could not run while planning:')
-    && /invalid handoff JSON string:|final answer that is not one JSON object:/.test(reason))) return 'plan'
-  if (reason.startsWith('platform_deployment:')) return 'deployment'
-  return 'other'
-}
-
-export function ResumeStep({ jobId, platform, reason = '', retryUsed = false }: { jobId: string; platform: Platform; reason?: string; retryUsed?: boolean }) {
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const kind = recoveryKind(reason)
-  const resume = async () => {
-    if (!platform.api || !note.trim() || busy) return
-    setBusy(true)
-    try {
-      const answer = await platform.api.command({ type: 'job.resume', commandId: crypto.randomUUID(),
-        jobId, requestedBy: 'local-operator', note: note.trim() })
-      if (answer.ok !== true) throw new Error(String(answer.error ?? '재개할 수 없습니다'))
-      setMessage(kind === 'plan' ? '기존 job과 자료를 유지하고 계획을 다시 작성합니다.' : '완료된 단계는 보존하고, 막혔던 단계부터 재개합니다.')
-      platform.refresh()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
-    } finally { setBusy(false) }
-  }
-  if (kind === 'other') return <section className="pad job-resume">
-    <b>중단 원인 확인 필요</b><p className="muted">{reason || '중단 원인을 불러오는 중입니다.'}</p>
-    <p className="muted">이 오류는 드라이버 재개 대상이 아닙니다. 원인에 맞는 조치가 필요합니다.</p>
-  </section>
-  return <section className="pad job-resume">
-    <b>{kind === 'plan' ? '계획 응답 형식 오류' : '원인 해결 후 재개'}</b>
-    <p className="muted">{kind === 'plan'
-      ? '장비 실행 전 계획 JSON을 읽지 못했습니다. 기존 시나리오·자료로 계획만 다시 작성하며 웹 재검색은 하지 않습니다. 잘린 과거 응답의 원문을 복구하는 기능은 아닙니다. 장비 권한은 변경되지 않습니다.'
-      : '실행 전 드라이버 문제로 멈춘 단계만 재개합니다. 적용·재시작을 확인하며 장비 상태가 불명확하면 재실행하지 않습니다.'}</p>
-    {kind === 'plan' && retryUsed && <p className="error">이번 계획 재작성 기회를 이미 사용했습니다. 오류 검토가 필요합니다.</p>}
-    <input aria-label="재개를 위한 해결 내용" placeholder={kind === 'plan' ? '예: 기존 자료로 계획 재작성을 요청합니다' : '예: 수정본 검토·반영 후 데몬을 재시작했습니다'} value={note} onChange={(event) => setNote(event.target.value)} />
-    <button disabled={busy || !note.trim() || !platform.api || (kind === 'plan' && retryUsed)} onClick={() => void resume()}>{busy ? '재개 요청 중…' : kind === 'plan' ? '기존 자료로 계획 다시 작성' : '확인하고 해당 단계 재개'}</button>
-    {message && <p role="status">{message}</p>}
-  </section>
 }
 
 function ResultCard({

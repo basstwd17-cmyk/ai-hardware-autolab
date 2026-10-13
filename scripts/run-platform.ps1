@@ -1,7 +1,6 @@
 param(
     [ValidateSet('daemon', 'web')][string]$Component = 'daemon',
     [string]$ProjectRoot = '',
-    [ValidateSet('offline', 'hardware')][string]$Profile = 'offline',
     [string]$Pipe = '\\.\pipe\autolab-web',
     [string]$ProjectId = ''
 )
@@ -20,7 +19,7 @@ try {
     } else {
         if (-not $ProjectRoot) { throw 'Pass -ProjectRoot with the Git checkout you want to develop.' }
         $sourceRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
-        $daemonArguments = @('-m', 'ai_hardware_autolab.orchestrator', '--project-root', $sourceRoot, '--ledger', 'ai_hardware_autolab/webui/state/web-jobs.db', '--runs', 'ai_hardware_autolab/runs', '--knowledge-db', 'ai_hardware_autolab/runs/knowledge.db', '--profile', $Profile, '--pipe', $Pipe)
+        $daemonArguments = @('-m', 'ai_hardware_autolab.orchestrator', '--project-root', $sourceRoot, '--ledger', 'ai_hardware_autolab/webui/state/web-jobs.db', '--runs', 'ai_hardware_autolab/runs', '--knowledge-db', 'ai_hardware_autolab/runs/knowledge.db', '--profile', 'offline', '--pipe', $Pipe)
         if ($ProjectId) { $daemonArguments += @('--knowledge-project', $ProjectId) }
         & $pythonCommand @daemonArguments
     }

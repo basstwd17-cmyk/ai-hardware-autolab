@@ -45,7 +45,7 @@ def setup_flow(tmp_path, run, *, dry_run=False):
     flow = WebConversationFlow(ledger, runtime, manager)
     router = WorkflowRouter(ledger, conversation=flow)
     daemon = Daemon(ledger, router)
-    control = ControlPlane(ledger, daemon, preflight_engine=ScenarioPreflight(contracts_dir=tmp_path / 'no-contracts'))
+    control = ControlPlane(ledger, daemon, preflight_engine=ScenarioPreflight())
     return source, ledger, flow, daemon, control
 
 
@@ -164,18 +164,9 @@ def test_prose_only_work_does_not_require_a_dummy_file(tmp_path):
 
 def test_production_assembly_completes_without_constructing_legacy_engines(tmp_path, monkeypatch):
     from ai_hardware_autolab.orchestrator import __main__ as entrypoint
-    from ai_hardware_autolab.orchestrator.campaign import CampaignController
-    from ai_hardware_autolab.orchestrator.contract_compiler import ContractCompiler
-    from ai_hardware_autolab.orchestrator.codex_runner import CodexAgentRunner
-    from ai_hardware_autolab.orchestrator.loop import Loop
-    from ai_hardware_autolab.boards.profiles import BoardCatalog
-
-    def retired(*args, **kwargs):
-        pytest.fail('production must not initialize a retired execution engine')
-
-    for kind in (CampaignController, ContractCompiler, CodexAgentRunner, Loop):
-        monkeypatch.setattr(kind, '__init__', retired)
-    monkeypatch.setattr(BoardCatalog, 'load_default', retired)
+    import sys
+    for name in ('campaign', 'contract_compiler', 'loop', 'codex_runner'):
+        assert 'ai_hardware_autolab.orchestrator.'+name not in sys.modules
     source = _source_repo(tmp_path)
     monkeypatch.setattr(entrypoint, 'PLATFORM_ROOT', source / 'ai_hardware_autolab')
     args = SimpleNamespace(ledger=str(tmp_path / 'production.db'), runs=str(tmp_path / 'runs'),
@@ -198,7 +189,7 @@ def test_production_assembly_completes_without_constructing_legacy_engines(tmp_p
     job_id = submit(service.control)
     for _ in range(3):
         service.tick_once()
-    assert raw is None and service.campaign_controller is None
+    assert raw is None and not hasattr(service, 'campaign_controller')
     assert calls == ['lead', 'builder', 'verifier']
     assert service.ledger.job(job_id).outcome == 'satisfied'
     assert not service.ledger.handoffs(job_id, 'Plan')
@@ -229,5 +220,4 @@ def test_retired_job_stays_readable_and_does_not_starve_current_work(tmp_path):
     assert seen == [fresh.job_id]
     assert ledger.latest_event_id() == before
     assert ControlPlane(ledger, daemon).job(old.job_id)['job']['job_id'] == old.job_id
-    with pytest.raises(ValueError, match='retired'):
-        router.resume_step(old.job_id, 'operator', 'do not replay history')
+    assert not hasattr(router, 'resume_step')

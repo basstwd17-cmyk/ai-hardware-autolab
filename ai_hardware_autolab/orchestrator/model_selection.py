@@ -43,7 +43,7 @@ def selection_for(resources: Any, agent: str) -> dict[str, str]:
 
 def load_codex_models() -> list[dict[str, Any]]:
     # Lazy import avoids coupling control/ledger startup to the runtime adapter.
-    from .codex_runner import StdioAppServer, _find_codex, PROJECT_ROOT
+    from .codex_transport import StdioAppServer, _find_codex, PROJECT_ROOT
 
     with StdioAppServer(
         command=(_find_codex(), "app-server", "--stdio"), cwd=PROJECT_ROOT,

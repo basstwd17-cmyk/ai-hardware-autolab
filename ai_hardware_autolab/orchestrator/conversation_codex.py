@@ -14,60 +14,22 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from .codex_runner import StdioAppServer, CodexRunnerError, _find_codex, _approval_command
-from .conversation_flow import ConversationFlow, INSTRUCTIONS, ROLES, device_tools_for_role
+from .codex_transport import StdioAppServer, CodexRunnerError, _find_codex, _approval_command
+from .conversation_flow import ConversationFlow, INSTRUCTIONS, ROLES
 from .execution_guard import HardwareExecutionDenied, require_offline_workspace_command
 
 
 def reply_schema(role, *, device_tools=()):
-    device_tools = device_tools_for_role(role, device_tools)
-    statuses = (["satisfied", "revise", "needs_user"] if role == "verifier"
-                else ["ready", "revise", "needs_user"])
-    if device_tools:
-        statuses.append("device")
-    device_call = {"type": "null"}
-    if device_tools:
-        # Strict output schemas cannot contain an open-ended object. Transport
-        # tool-specific JSON as text, then decode before the existing host checks.
-        device_call = {"anyOf": [
-            {"type": "null"},
-            {"type": "object", "additionalProperties": False,
-             "properties": {
-                 "tool": {"type": "string", "enum": list(device_tools)},
-                 "arguments": {"type": "string", "description":
-                     "A JSON-encoded object of actual tool arguments, e.g. {\"identity_only\":true}. "
-                     "Do not include contract or record_name; the host binds them."},
-             }, "required": ["tool", "arguments"]},
-        ]}
-    return {
-        "type": "object", "additionalProperties": False,
-        "properties": {
-            "status": {"type": "string", "enum": statuses},
-            "summary": {"type": "string"},
-            "knowledge": {"type": "array", "description":
-                "Optional reusable findings, implementation methods or lessons. Use [] if none. "
-                "Preserve conditions and uncertainty; these notes do not authorize execution.",
-                "items": {"type": "object", "additionalProperties": False,
-                          "properties": {"topic": {"type": "string"}, "text": {"type": "string"}},
-                          "required": ["topic", "text"]}},
-            "artifacts": {"type": "array", "items": {"type": "string"}},
-            "runs": {"type": "array", "items": {"type": "string"}},
-            "scope_connections": {"type": "array", "items": {
-                "type": "object", "additionalProperties": False,
-                "properties": {"channel": {"type": "integer", "enum": [1, 2, 3, 4]},
-                               "signal": {"type": "string"}},
-                "required": ["channel", "signal"],
-            }},
-            "sources": {"type": "array", "items": {
-                "type": "object", "additionalProperties": False,
-                "properties": {key: {"type": "string"} for key in ("title", "url", "finding")},
-                "required": ["title", "url", "finding"],
-            }},
-            "device_call": device_call,
-            "target": {"type": ["string", "null"], "enum": [None, "lead", "builder"]},
-        },
-        "required": ["status", "summary", "knowledge", "artifacts", "runs", "sources", "scope_connections", "device_call", "target"],
-    }
+    statuses = ['satisfied','revise','needs_user'] if role=='verifier' else ['ready','revise','needs_user']
+    return {'type':'object', 'additionalProperties':False, 'properties':{
+        'status':{'type':'string','enum':statuses}, 'summary':{'type':'string'},
+        'knowledge':{'type':'array','items':{'type':'object','additionalProperties':False,
+            'properties':{'topic':{'type':'string'},'text':{'type':'string'}},'required':['topic','text']}},
+        'artifacts':{'type':'array','items':{'type':'string'}}, 'runs':{'type':'array','items':{'type':'string'}},
+        'sources':{'type':'array','items':{'type':'object','additionalProperties':False,
+            'properties':{k:{'type':'string'} for k in ('title','url','finding')},'required':['title','url','finding']}},
+        'target':{'type':['string','null'],'enum':[None,'lead','builder']}},
+        'required':['status','summary','knowledge','artifacts','runs','sources','target']}
 
 
 @dataclass(frozen=True)
@@ -239,9 +201,6 @@ class ConversationCodexRuntime:
                 "\nUse the native web search/open tool for public datasheets and official documentation when available. "
                 "Do not use shell networking, contact devices, deploy from the shell, or expand permissions. "
                 "Local command network access remains disabled; it does not disable native web research. "
-                "When context lists device_tools, request a permitted tool in the final reply; all roles may check_connections, and other device tools are Builder only. The host executes it after this turn and returns to you. "
-                "In the final reply, device_call.arguments is a JSON-encoded object in a string; "
-                "use device_call=null for every non-device reply. "
                 "Use ordinary source inspection and, for Builder, workspace edits and commands. "
                 "Fix ordinary code, argument and test errors within this turn; keep checks proportional "
                 "to the request and stop when sufficient. Do not inspect platform schemas or create "
@@ -261,10 +220,9 @@ class ConversationCodexRuntime:
                     "networkAccess": False, "excludeTmpdirEnvVar": True, "excludeSlashTmp": True}
             payload = repair if fixing else {k: v for k, v in context.items()
                                             if k not in {"instructions", "reply_format"}}
-            device_tools = tuple(((context.get("inputs") or {}).get("device_tools") or ()))
             params = {"cwd": str(workspace), "approvalPolicy": "untrusted", "approvalsReviewer": "user",
                 "sandboxPolicy": sandbox, "summary": "concise",
-                "outputSchema": reply_schema(role, device_tools=device_tools),
+                "outputSchema": reply_schema(role),
                 "input": [{"type": "text", "text": "Return one direct reply object. No nested handoff or JSON string.\n"
                            + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}]}
             if self.config.model: params["model"] = self.config.model
@@ -294,7 +252,7 @@ class ConversationCodexRuntime:
     def __call__(self, role, context):
         if role not in ROLES or context.get("role") != role:
             raise ValueError("host role mismatch")
-        if context.get("execution_mode") not in {"offline", "hardware"} or context.get("hardware_access") is not False:
+        if context.get("execution_mode") != "offline" or context.get("hardware_access") is not False:
             raise ValueError("conversation model turns must use the host-controlled development runtime")
         workspace = Path(context["workspace"]).resolve(strict=True)
         if (not workspace.is_dir() or workspace == self.config.workspaces_root
@@ -306,12 +264,7 @@ class ConversationCodexRuntime:
                 if len(text.encode("utf-8")) > 65536:
                     raise ValueError("final response exceeds 64 KiB")
                 value = json.loads(text)
-                call = value.get("device_call") if isinstance(value, dict) else None
-                if isinstance(call, dict) and isinstance(call.get("arguments"), str):
-                    call["arguments"] = json.loads(call["arguments"])
-                tools = tuple(((context.get("inputs") or {}).get("device_tools") or ()))
-                reply, _ = ConversationFlow.validate_reply(role, value, workspace,
-                                                             device_tools=tools)
+                reply, _ = ConversationFlow.validate_reply(role, value, workspace)
                 return reply
             except (ValueError, TypeError) as exc:
                 if attempt or len(text.encode("utf-8")) > 65536:

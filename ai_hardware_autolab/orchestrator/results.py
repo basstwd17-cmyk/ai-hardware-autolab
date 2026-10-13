@@ -186,17 +186,6 @@ def _conversation_result(ledger, job_id, brief, project_root, runs_dir):
                 continue
             artifacts.append(Artifact("conversation:" + identity, "document", str(path),
                                       str(project), relative))
-    # Expose only cited runs actually returned to this job, including identity
-    # observations. Verifier judges their relevance to the original scenario.
-    cited_runs = set(last.payload["reply"].get("runs", [])) if last else set()
-    from .conversation_flow import device_run_names
-    device_runs = set().union(*(device_run_names(event.payload)
-        for event in iter_events(ledger, job_id) if event.kind == "conversation.device.completed"))
-    for run in sorted(cited_runs & device_runs):
-        directory = _inside(project, Path(runs_dir) / run)
-        if directory is not None and directory.is_dir():
-            artifacts.append(Artifact(f"run:{run}", "run", str(directory),
-                                      str(project), run))
     summary = last.payload["reply"]["summary"] if last else "에이전트 응답 전에 작업이 종료됐습니다."
     sources = {}
     for event in replies:

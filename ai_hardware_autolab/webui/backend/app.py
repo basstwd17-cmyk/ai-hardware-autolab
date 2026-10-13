@@ -36,7 +36,7 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ai_hardware_autolab.hwtools.result import utc_now
+from ai_hardware_autolab.utils import utc_now
 from ai_hardware_autolab.orchestrator import wire as W
 from ai_hardware_autolab.webui.backend.channels import (
     DEFAULT_CAPACITY,

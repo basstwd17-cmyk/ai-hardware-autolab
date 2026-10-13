@@ -15,60 +15,21 @@ from .conversation_codex import ConversationCodexRuntime, ledger_event_sink
 from .model_selection import selection_for
 
 
-def prepare_intake(scenario, engine, *, controller=None, board_catalog=None, previous=None,
-                   execution_mode=None, hardware_profile=None, hardware_enabled=None):
-    """Prepare the single workflow from the installed board profile."""
-    from .conversation_hardware import device_tool_catalog
+def prepare_intake(scenario, engine, **_unused):
     from .scenario_preflight import PreflightError
-
-    if not isinstance(scenario, str) or not scenario.strip():
-        raise PreflightError("a scenario is required")
-    mode = execution_mode or engine._execution_mode(scenario, None)
-    mode = "hardware" if mode == "hardware" else "offline"
-    preview = {"status": "ready", "reason_code": "single_workflow",
-               "detail": "", "selected_hardware": None, "candidates": []}
-    preview.update(scenario=scenario, scenario_sha256=hashlib.sha256(scenario.strip().encode()).hexdigest(),
-                   execution_mode=mode, workflow="conversation", roles=["lead-agent", "builder", "verifier"])
-    inputs = {"intake_version": 1}
-    if hardware_profile is not None:
-        inputs["selected_board"] = hardware_profile.public_description()
-        inputs["hardware_selection"] = {"board_id": hardware_profile.board_id, "revision": hardware_profile.revision}
-    if mode == "offline":
-        preview.update(status="ready", approval_required=False,
-                       detail="같은 대화에서 Lead → Builder → Verifier로 개발합니다. 장비 접근은 꺼져 있습니다.")
-        return preview, inputs
-
-    enabled = bool(hardware_enabled if hardware_enabled is not None else
-                   controller is not None and getattr(controller, "hardware_enabled", False))
-    ready = bool(enabled and hardware_profile is not None)
-    selected = hardware_profile.public_description() if ready else None
-    detail = ("선택한 보드·장비 구성을 불러왔습니다. 작업공간에서 개발하고, 제공된 장비 도구는 "
-              "Hardware 시나리오 안에서 별도 승인 없이 실행합니다. 업로드 지원 범위는 구성별 도구를 확인합니다." if ready else
-              "Hardware 프로필과 보드 하드웨어 설정을 켠 데몬으로 시작해주세요.")
-    catalog = device_tool_catalog(hardware_profile) if ready else []
-    inputs.update(hardware_profile={"board_id": hardware_profile.board_id,
-                                    "revision": hardware_profile.revision,
-                                    "sha256": hardware_profile.sha256} if ready else None,
-                  device_tools=[row["name"] for row in catalog], device_tool_catalog=catalog,
-                  device_readiness={"status": "ready" if ready else "needs_input", "detail": detail})
-    if ready:
-        inputs["scope_channels"] = hardware_profile.data.get("scope", {}).get("channels", [])
-        inputs["hardware_devices"] = selected["devices"]
-    preview.update(status="ready" if ready else "hardware_profile_missing", detail=detail,
-                   approval_required=False, selected_hardware=selected,
-                   device_readiness=inputs["device_readiness"])
-    return preview, inputs
+    if not isinstance(scenario,str) or not scenario.strip(): raise PreflightError("a scenario is required")
+    return ({"status":"ready", "reason_code":"single_workflow", "detail":"Lead → Builder → Verifier로 프로젝트를 개발합니다.",
+             "scenario":scenario, "scenario_sha256":hashlib.sha256(scenario.strip().encode()).hexdigest(),
+             "execution_mode":"offline", "workflow":"conversation", "roles":["lead-agent","builder","verifier"], "approval_required":False}, {"intake_version":1})
 
 
 class WorkspaceConversationRuntime:
     def __init__(self, ledger, manager, config, *, factory=ConversationCodexRuntime,
-                 dry_run=False, role_models=None, knowledge_retriever=None, knowledge_scope=None,
-                 device_executor=None):
+                 dry_run=False, role_models=None, knowledge_retriever=None, knowledge_scope=None):
         self.ledger, self.manager, self.config = ledger, manager, config
         self.factory, self.dry_run = factory, dry_run
         self.role_models = role_models or {}
         self.knowledge_retriever, self.knowledge_scope = knowledge_retriever, knowledge_scope
-        self.device_executor = device_executor
         self._active = {}
         self._lock = threading.Lock()
 
@@ -137,12 +98,6 @@ class WorkspaceConversationRuntime:
             return runtime.cancel(job_id)
         return False
 
-    def execute_device(self, job_id, request_turn_id, request):
-        if self.dry_run:
-            raise RuntimeError("dry-run: no device was executed")
-        if self.device_executor is None:
-            raise RuntimeError("hardware execution adapter is not configured")
-        return self.device_executor(job_id, request_turn_id, request)
 
 
 class WebConversationFlow(ConversationFlow):
@@ -167,7 +122,7 @@ class WebConversationFlow(ConversationFlow):
         return self.create(objective, workspace, job_id=job_id, execution_mode=execution_mode, inputs={
             "scenario": scenario, "scenario_sha256": scenario_sha256,
             "model_selection": selected_models, "search_policy": search_policy,
-            "available_sources": "Current workspace source, board/device maps, retrieved knowledge, and native web research when enabled.",
+            "available_sources": "Current project source, documentation, retrieved knowledge, and native web research when enabled.",
             "research": {"web_search": web_search, "source_preference": "official project documentation, primary references and manufacturer datasheets when relevant",
                          "source_notes": "Carry document title, URL and relevant findings in sources; reuse research_sources across turns."},
             "limitations": limitations,
@@ -184,16 +139,6 @@ class WebConversationFlow(ConversationFlow):
                     and replies[-1].payload["reply"]["status"] == "needs_user")
         self.feedback(job_id, message, actor=sent_by)
         feedback = [e for e in self._events(job_id) if e.kind == "conversation.feedback"]
-        brief = self._brief(job_id)
-        inputs = brief.get("inputs") or {}
-        if (question and prepare is not None and inputs.get("intake_version") == 1
-                and brief["execution_mode"] == "hardware"
-                and (inputs.get("device_readiness") or {}).get("status") != "ready"):
-            scenario = inputs["scenario"] + "\n\nUser clarification:\n" + "\n".join(
-                e.payload["message"] for e in feedback)
-            prepared = prepare(scenario, inputs)
-            self.ledger.append_event(job_id, "conversation.hardware.prepared",
-                {"feedback_event_id": feedback[-1].event_id, "inputs": prepared}, "platform")
         if question:
             self.ledger.transition(job_id, "running", reason="user answered; return context to Lead")
         event = feedback[-1]

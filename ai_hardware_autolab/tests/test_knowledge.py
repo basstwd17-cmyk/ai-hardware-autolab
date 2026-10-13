@@ -12,10 +12,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from ai_hardware_autolab.knowledge.ingest import (  # noqa: E402
-    SourcePacketKnowledgeIngestor,
-    candidates_from_source_packet,
-)
 from ai_hardware_autolab.knowledge.models import (  # noqa: E402
     KnowledgeCandidate,
     KnowledgeScope,
@@ -25,7 +21,6 @@ from ai_hardware_autolab.knowledge.models import (  # noqa: E402
 from ai_hardware_autolab.knowledge.reducer import FilesystemEvidenceResolver, KnowledgeReducer  # noqa: E402
 from ai_hardware_autolab.knowledge.retriever import KnowledgeRetriever  # noqa: E402
 from ai_hardware_autolab.knowledge.store import KnowledgeStore, KnowledgeStoreError  # noqa: E402
-from ai_hardware_autolab.research.models import SourcePacket  # noqa: E402
 
 
 def _sha(path: Path) -> str:
@@ -177,92 +172,8 @@ def _reference(root: Path) -> tuple[str, str]:
     return document_id, text
 
 
-def test_source_packet_becomes_verified_candidates_only_after_page_check(tmp_path: Path):
-    document_id, excerpt = _reference(tmp_path)
-    packet = SourcePacket.parse(
-        {
-            "kind": "SourcePacket",
-            "agent": "researcher",
-            "scenario_sha256": "a" * 64,
-            "queries": [
-                {
-                    "query": "official pru timing",
-                    "reason": "answer timing",
-                    "selected_document_ids": [document_id],
-                }
-            ],
-            "documents": [
-                {
-                    "document_id": document_id,
-                    "title": "PRU reference",
-                    "source_kind": "official-web",
-                }
-            ],
-            "claims": [
-                {
-                    "id": "pru-cycle",
-                    "question_id": "pru-timing",
-                    "statement": "The cited page defines the PRU cycle behaviour.",
-                    "value": 5,
-                    "unit": "ns",
-                    "citations": [
-                        {"document_id": document_id, "page": 42, "excerpt": excerpt}
-                    ],
-                }
-            ],
-            "open_questions": [],
-        }
-    )
-    candidates = candidates_from_source_packet(
-        packet,
-        KnowledgeScope("qkd-proj", "bbb-am335x", "rev-c"),
-        source_job_id="job_discovery",
-    )
-
-    claim = KnowledgeReducer(FilesystemEvidenceResolver(tmp_path)).reduce(candidates[0])
-
-    assert claim.status == "verified"
-    assert claim.candidate.source_job_id == "job_discovery"
-    assert claim.checks[0].code == "verified_document_page"
 
 
-def test_source_packet_ingestion_is_idempotent_across_daemon_restarts(tmp_path: Path):
-    document_id, excerpt = _reference(tmp_path)
-    packet = SourcePacket.parse(
-        {
-            "kind": "SourcePacket",
-            "agent": "researcher",
-            "scenario_sha256": "a" * 64,
-            "queries": [],
-            "documents": [
-                {"document_id": document_id, "title": "PRU reference", "source_kind": "pdf"}
-            ],
-            "claims": [
-                {
-                    "id": "pru-cycle",
-                    "question_id": "pru-timing",
-                    "statement": "The cited page defines the PRU cycle behaviour.",
-                    "value": 5,
-                    "unit": "ns",
-                    "citations": [
-                        {"document_id": document_id, "page": 42, "excerpt": excerpt}
-                    ],
-                }
-            ],
-            "open_questions": [],
-        }
-    )
-    scope = KnowledgeScope("qkd-proj", "bbb-am335x", "rev-c")
-    store = KnowledgeStore(tmp_path / "knowledge.db")
-    first = SourcePacketKnowledgeIngestor(
-        KnowledgeReducer(FilesystemEvidenceResolver(tmp_path)), store
-    ).ingest(packet, scope, source_job_id="job_1")
-    second = SourcePacketKnowledgeIngestor(
-        KnowledgeReducer(FilesystemEvidenceResolver(tmp_path)), KnowledgeStore(store.path)
-    ).ingest(packet, scope, source_job_id="job_1")
-
-    assert first.events[0].event_id == second.events[0].event_id
-    assert len(store.events_since()) == 1
 
 
 def test_store_is_idempotent_searchable_and_scope_limited(tmp_path: Path):

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from ai_hardware_autolab.hwtools.result import utc_now
+from ai_hardware_autolab.utils import utc_now
 
 from .models import (
     CLAIM_STATUSES,

@@ -5,7 +5,7 @@ compact control-plane snapshot, claims at most one scoped command, sends that
 command through the same named-pipe protocol as the local UI, and posts the
 answer.  A claimed command is never automatically reclaimed: if this process
 dies after the local effect but before posting the result, repeating it could
-program hardware or duplicate a mission.  The cloud UI leaves that command in
+duplicate a mission.  The cloud UI leaves that command in
 ``claimed`` for a person to reconcile against the local ledger.
 """
 
@@ -167,37 +167,8 @@ class CloudRelayClient:
                 "note": str(payload.get("note") or "")[:1000],
             })
 
-        if kind == "campaign.bundle.preview":
-            return self._wire({
-                "type": W.CAMPAIGN_BUNDLE_PREVIEW,
-                "commandId": command_id,
-                "jobId": _text(payload, "jobId", 100),
-                "maxIterations": _integer(payload, "maxIterations", 8, 64),
-                "maxAutoApprovals": _integer(payload, "maxAutoApprovals", 24, 256),
-                "durationHours": _integer(payload, "durationHours", 12, 72),
-            })
 
-        if kind == "campaign.bundle.approve":
-            return self._wire({
-                "type": W.CAMPAIGN_BUNDLE_APPROVE,
-                "commandId": command_id,
-                "jobId": _text(payload, "jobId", 100),
-                "approvedBy": _text(payload, "approvedBy", 100),
-                "reviewSha256": _digest(payload, "reviewSha256"),
-                "maxIterations": _integer(payload, "maxIterations", 8, 64),
-                "maxAutoApprovals": _integer(payload, "maxAutoApprovals", 24, 256),
-                "durationHours": _integer(payload, "durationHours", 12, 72),
-                "comment": str(payload.get("comment") or "")[:4000],
-            })
 
-        if kind == "job.mission.revise":
-            return self._wire({
-                "type": W.JOB_MISSION_REVISE,
-                "commandId": command_id,
-                "jobId": _text(payload, "jobId", 100),
-                "requestedBy": _text(payload, "requestedBy", 100),
-                "message": _text(payload, "message"),
-            })
 
         if kind == "job.steer":
             return self._wire({
